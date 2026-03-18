@@ -1,0 +1,16 @@
+# Spring Boot / Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+*.jar
+*.war
+*.ear
+# IDE
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+# Spring
+application-local.yml
+application-local.properties

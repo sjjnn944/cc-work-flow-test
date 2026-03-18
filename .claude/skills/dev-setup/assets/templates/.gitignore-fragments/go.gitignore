@@ -1,0 +1,9 @@
+# Go
+bin/
+vendor/
+*.exe
+*.test
+*.out
+*.prof
+coverage.out
+coverage.html

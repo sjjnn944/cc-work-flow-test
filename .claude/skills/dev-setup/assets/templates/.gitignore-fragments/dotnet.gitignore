@@ -1,0 +1,14 @@
+# .NET / ASP.NET Core
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+packages/
+*.nupkg
+project.lock.json
+*.nuget.props
+*.nuget.targets
+launchSettings.json

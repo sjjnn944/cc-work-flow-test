@@ -1,0 +1,75 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+venv/
+.venv/
+pip-log.txt
+
+# === C/C++ ===
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+*.lib
+*.a
+*.out
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# === Java ===
+*.class
+*.jar
+*.war
+target/
+.gradle/
+build/
+
+# === Node.js ===
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# === OS ===
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# === Testing ===
+.coverage
+htmlcov/
+.pytest_cache/
+coverage.xml
+*.gcno
+*.gcda
+*.gcov
+
+# === Project ===
+logs/
+.temp/
+*.log
+.omc/
+nul

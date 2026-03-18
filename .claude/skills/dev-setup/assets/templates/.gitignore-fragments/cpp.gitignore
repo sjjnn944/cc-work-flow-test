@@ -1,0 +1,29 @@
+# C++/CMake
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.exe
+*.out
+*.pdb
+*.ilk
+*.exp
+compile_commands.json
+.cache/
+.vs/
+*.vcxproj.user
+# vcpkg
+vcpkg_installed/
+
+# Third-party libraries (project-local)
+thirdparty/
+!thirdparty/.gitkeep

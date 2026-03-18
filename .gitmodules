@@ -1,0 +1,4 @@
+[submodule "doc/base"]
+	path = doc/base
+	url = https://github.com/sjjnn944/project-init-guide.git
+	branch = master

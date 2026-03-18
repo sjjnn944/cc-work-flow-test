@@ -1,0 +1,22 @@
+# Django / Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+*.egg
+db.sqlite3
+db.sqlite3-journal
+*.log
+.env
+staticfiles/
+mediafiles/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
