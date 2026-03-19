@@ -1,5 +1,5 @@
 # dev-setup: C++ 개발 환경 설치 (Windows)
-# 설치 항목: MSVC Build Tools 2022, CMake, Ninja, vcpkg, clang-format
+# 설치 항목: MSVC Build Tools 2022, CMake, Ninja, vcpkg, clang-format, Windows SDK, WDK
 
 . "$PSScriptRoot\_common.ps1"
 
@@ -67,6 +67,47 @@ function Install-CppEnvironment {
         }
     }
 
+    # --- Windows SDK ---
+    Write-Status "CHECK" "Windows SDK 확인 중..."
+    $sdkIncBase = "${env:ProgramFiles(x86)}\Windows Kits\10\Include"
+    $hasSdk = (Test-Path $sdkIncBase) -and (
+        Get-ChildItem $sdkIncBase -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path (Join-Path $_.FullName "um\windows.h") } |
+        Select-Object -First 1
+    )
+    if ($hasSdk) {
+        $sdkVer = Get-ChildItem $sdkIncBase -Directory |
+                  Where-Object { Test-Path (Join-Path $_.FullName "um\windows.h") } |
+                  Sort-Object Name -Descending | Select-Object -First 1
+        Write-Status "SKIP" "Windows SDK 이미 설치됨: $($sdkVer.Name)"
+    } elseif ($script:CheckOnly) {
+        Write-Status "FAIL" "Windows SDK 없음"
+    } else {
+        if (-not (Install-WithWinget "Microsoft.WindowsSDK.10.0.26100" "Windows SDK 10.0.26100")) {
+            Install-WithChoco "windows-sdk-10-version-2004-all" "Windows SDK"
+        }
+    }
+
+    # --- WDK (Windows Driver Kit) ---
+    Write-Status "CHECK" "WDK 확인 중..."
+    $hasWdk = (Test-Path $sdkIncBase) -and (
+        Get-ChildItem $sdkIncBase -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path (Join-Path $_.FullName "km\ntddk.h") } |
+        Select-Object -First 1
+    )
+    if ($hasWdk) {
+        $wdkVer = Get-ChildItem $sdkIncBase -Directory |
+                  Where-Object { Test-Path (Join-Path $_.FullName "km\ntddk.h") } |
+                  Sort-Object Name -Descending | Select-Object -First 1
+        Write-Status "SKIP" "WDK 이미 설치됨: $($wdkVer.Name)"
+    } elseif ($script:CheckOnly) {
+        Write-Status "FAIL" "WDK 없음"
+    } else {
+        if (-not (Install-WithWinget "Microsoft.WindowsWDK.10.0.26100" "WDK 10.0.26100")) {
+            Install-WithChoco "windowsdriverkit11" "Windows Driver Kit"
+        }
+    }
+
     # --- clang-format (optional, part of LLVM) ---
     Write-Status "CHECK" "clang-format 확인 중..."
     if (Test-CommandExists "clang-format") {
@@ -77,6 +118,14 @@ function Install-CppEnvironment {
         Write-Status "INSTALL" "clang-format 설치 중 (LLVM)..."
         Install-WithWinget "LLVM.LLVM" "LLVM (clang-format)"
         Refresh-PathEnv
+    }
+
+    # --- 빌드 검증 ---
+    if (-not $script:CheckOnly) {
+        Write-Host "`n=== 빌드 검증 ===" -ForegroundColor Magenta
+        $skillRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+        Test-BuildSample -Platform "cpp" -SkillRoot $skillRoot
+        Test-BuildSample -Platform "driver" -SkillRoot $skillRoot
     }
 
     # --- 검증 요약 ---
@@ -96,6 +145,24 @@ function Install-CppEnvironment {
         Write-Status "OK" "vcpkg: $verifyVcpkgPath"
     } else {
         Write-Status "FAIL" "vcpkg: 찾을 수 없음"
+    }
+    # SDK / WDK 검증
+    $verifyIncBase = "${env:ProgramFiles(x86)}\Windows Kits\10\Include"
+    $verifySdk = Get-ChildItem $verifyIncBase -Directory -ErrorAction SilentlyContinue |
+                 Where-Object { Test-Path (Join-Path $_.FullName "um\windows.h") } |
+                 Sort-Object Name -Descending | Select-Object -First 1
+    if ($verifySdk) {
+        Write-Status "OK" "Windows SDK: $($verifySdk.Name)"
+    } else {
+        Write-Status "FAIL" "Windows SDK: 찾을 수 없음"
+    }
+    $verifyWdk = Get-ChildItem $verifyIncBase -Directory -ErrorAction SilentlyContinue |
+                 Where-Object { Test-Path (Join-Path $_.FullName "km\ntddk.h") } |
+                 Sort-Object Name -Descending | Select-Object -First 1
+    if ($verifyWdk) {
+        Write-Status "OK" "WDK: $($verifyWdk.Name)"
+    } else {
+        Write-Status "FAIL" "WDK: 찾을 수 없음"
     }
 }
 

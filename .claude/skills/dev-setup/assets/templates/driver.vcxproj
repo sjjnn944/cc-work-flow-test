@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  dev-setup 드라이버 모듈 vcxproj 템플릿
+  치환 변수:
+    {{ProjectGuid}}    — 모듈별 고유 GUID
+    {{RootNamespace}}  — 모듈코드 PascalCase (예: AgtDrvfs)
+    {{TargetName}}     — 모듈코드 소문자 (예: agt_drvfs)
+    {{DriverType}}     — WDM | KMDF | UMDF (설계서에서 추출, 기본값 WDM)
+    {{SourceFiles}}    — <ClCompile Include="..." /> 목록
+    {{HeaderFiles}}    — <ClInclude Include="..." /> 목록 (선택)
+-->
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{{ProjectGuid}}</ProjectGuid>
+    <RootNamespace>{{RootNamespace}}</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Debug -->
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>{{DriverType}}</DriverType>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <Driver_SpectreMitigation>Spectre</Driver_SpectreMitigation>
+  </PropertyGroup>
+
+  <!-- Release -->
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>{{DriverType}}</DriverType>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <Driver_SpectreMitigation>Spectre</Driver_SpectreMitigation>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+
+  <PropertyGroup>
+    <OutDir>$(SolutionDir)build\$(Configuration)\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)build\obj\$(RootNamespace)\$(Configuration)\$(Platform)\</IntDir>
+    <TargetName>{{TargetName}}</TargetName>
+  </PropertyGroup>
+
+  <!-- Debug 컴파일 옵션 -->
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>DBG=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <!-- Release 컴파일 옵션 -->
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <Optimization>MaxSpeed</Optimization>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <PropertyGroup>
+    <SignMode>Off</SignMode>
+    <Inf2CatUseLocalTime>true</Inf2CatUseLocalTime>
+  </PropertyGroup>
+
+  <!-- 소스 파일 -->
+  <ItemGroup>
+{{SourceFiles}}
+  </ItemGroup>
+
+  <!-- 헤더 파일 -->
+  <ItemGroup>
+{{HeaderFiles}}
+  </ItemGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+
+</Project>

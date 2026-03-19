@@ -1,0 +1,14 @@
+plugins {
+    id 'java'
+}
+
+group = 'verify'
+version = '1.0'
+sourceCompatibility = '17'
+targetCompatibility = '17'
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'verify.BuildVerify'
+    }
+}

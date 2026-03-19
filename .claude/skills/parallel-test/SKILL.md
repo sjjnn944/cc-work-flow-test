@@ -69,7 +69,9 @@ doc/develop/{sys}/{module}/implementation.md  (category 없는 flat 구조)
 
 **Skip 판정:**
 각 모듈 디렉토리에 `test.md`가 이미 존재하는지 확인.
-- 존재하고 `--force`가 아니면 → skip 목록에 추가
+- 존재하고 `--force`가 아니면 → 파일 내용을 Read하여 scaffold 템플릿 여부를 판별:
+  - `상태: 미작성` 또는 `(테스트 설계 시 작성)` 문자열이 포함된 경우 → **scaffold 빈 템플릿**으로 간주, skip하지 않고 대상 목록에 추가
+  - 그 외 (실질적 내용이 있는 경우) → skip 목록에 추가
 - 존재하지 않으면 → 대상 목록에 추가
 - `--force`이면 → 무조건 대상 목록에 추가
 

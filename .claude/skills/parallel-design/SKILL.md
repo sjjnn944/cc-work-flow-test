@@ -68,7 +68,9 @@ doc/develop/{sys}/{module}/interface.md  (category 없는 flat 구조)
 
 **Skip 판정:**
 각 모듈 디렉토리에 `implementation.md`가 이미 존재하는지 확인.
-- 존재하고 `--force`가 아니면 → skip 목록에 추가
+- 존재하고 `--force`가 아니면 → 파일 내용을 Read하여 scaffold 템플릿 여부를 판별:
+  - `상태: 미작성` 또는 `(상세 설계 시 작성)` 문자열이 포함된 경우 → **scaffold 빈 템플릿**으로 간주, skip하지 않고 대상 목록에 추가
+  - 그 외 (실질적 내용이 있는 경우) → skip 목록에 추가
 - 존재하지 않으면 → 대상 목록에 추가
 - `--force`이면 → 무조건 대상 목록에 추가
 
@@ -169,6 +171,7 @@ Step 02: {M}개 모듈 (Step 01 완료 후 실행)
 - 상세 설계 가이드: `doc/base/detailed-design-guide.md`
 - 플랫폼 참조 (C++/CMake): `doc/base/detailed-designs/cpp.md`
 - 플랫폼 참조 (Spring Boot): `doc/base/detailed-designs/springboot.md`
+- 코딩 컨벤션: `doc/base/coding-convention/README.md`
 
 ## 프로토콜 참조 원칙 (워커 필수 준수)
 
@@ -248,10 +251,11 @@ Step 02: {M}개 모듈 (Step 01 완료 후 실행)
 
 1. 상세 설계 가이드 (필수 읽기): `doc/base/detailed-design-guide.md`
 2. 플랫폼 참조 (필수 읽기): `doc/base/detailed-designs/{cpp|springboot}.md`
-3. 요구사항: `{doc_path}/requirement.md`
-4. 인터페이스: `{doc_path}/interface.md`
+3. 코딩 컨벤션 (존재 시 읽기): `doc/base/coding-convention/README.md`
+4. 요구사항: `{doc_path}/requirement.md`
+5. 인터페이스: `{doc_path}/interface.md`
 {소비자인 경우 추가:}
-5. 참조 인터페이스 (주체 모듈): `{owner_interface_path}`
+6. 참조 인터페이스 (주체 모듈): `{owner_interface_path}`
 
 ## 작업 범위
 
@@ -287,7 +291,7 @@ implementation.md에 복사하지 말 것. 참조 경로만 기재하고 "단일
 
 ```
 for step_num, modules in result_steps:
-  worker_count = min(len(modules), args.workers or len(modules))
+  worker_count = min(len(modules), args.workers or len(modules), 20)
 
   # /team 호출
   # 각 모듈별 워커 프롬프트를 구성하여 /team {worker_count}:deep-executor 에 전달
@@ -424,4 +428,7 @@ typedef struct _DLP_IPC_HEADER { ... }  # ← 단일 원천 원칙 위반
 - [ ] step 간 순차 실행이 보장되는가? (step 01 완료 후 step 02 실행)
 - [ ] 생성된 implementation.md에 프로토콜 정의 인라인 복사가 없는가?
 - [ ] 결과 보고에 성공/실패/skip 수가 정확히 집계되었는가?
+- [ ] 각 implementation.md에 detailed-design-guide.md 필수 섹션이 모두 포함되었는가? (파생 요구사항, 아키텍처 개요, 추적성 테이블, 컴포넌트 설계, 핵심 시퀀스, 에러 처리 전략, 데이터 구조, 의존 상세)
+- [ ] 각 implementation.md의 핵심 시퀀스가 정상 경로와 오류 경로를 모두 포함하는가?
+- [ ] 소비자 모듈의 implementation.md가 참조하는 주체 모듈 인터페이스의 함수 시그니처/메시지 코드를 빠짐없이 사용하고 있는가?
 </Final_Checklist>

@@ -194,6 +194,7 @@ Step 02: {M}개 모듈 (Step 01 완료 후 실행)
 - 모듈 매핑: `doc/architecture/module-mapping.md`
 - 플랫폼 참조 (C++/CMake): `doc/base/detailed-designs/cpp.md`
 - 플랫폼 참조 (Spring Boot): `doc/base/detailed-designs/springboot.md`
+- 코딩 컨벤션: `doc/base/coding-convention/README.md`
 
 ## 프로토콜 참조 원칙 (워커 필수 준수)
 
@@ -282,11 +283,12 @@ Step 02: {M}개 모듈 (Step 01 완료 후 실행)
 1. 구현 가이드 (필수 읽기): `doc/base/implementation-guide.md`
 2. 검증 가이드 (Phase A 섹션 읽기): `doc/base/verification-guide.md`
 3. 플랫폼 참조 (필수 읽기): `doc/base/detailed-designs/{cpp|springboot}.md`
-4. 설계서: `{doc_path}/implementation.md`
-5. 인터페이스: `{doc_path}/interface.md`
-6. 테스트 케이스: `{doc_path}/test.md`  (없으면 생략)
+4. 코딩 컨벤션 (존재 시 필수 읽기): `doc/base/coding-convention/README.md`
+5. 설계서: `{doc_path}/implementation.md`
+6. 인터페이스: `{doc_path}/interface.md`
+7. 테스트 케이스: `{doc_path}/test.md`  (없으면 생략)
 {소비자인 경우 추가:}
-7. 참조 인터페이스 (주체 모듈): `{owner_interface_path}`
+8. 참조 인터페이스 (주체 모듈): `{owner_interface_path}`
    → 주체 모듈 공유 헤더 경로: `{owner_src_path}/include/`
 
 ## 작업 범위
@@ -308,7 +310,9 @@ src 경로: `{src_path}/`
 
 구현 완료 후 verification-guide.md 섹션 1-4를 기준으로 검증 수행:
 
-1. **빌드 검증**: 빌드 스크립트 실행 → 컴파일 에러 0건 확인
+1. **빌드 검증**: `tools/build.ps1 -Module {MODULE_ID}` 실행 → 컴파일 에러 0건 확인
+   - Linux/macOS: `tools/build.sh --module {MODULE_ID}`
+   - tools/build.ps1이 없으면 플랫폼별 직접 빌드 (fallback)
 2. **정적 분석**: 정적 분석 도구 실행 → 경고 목록 수집
 3. **단위 테스트**: test.md의 테스트 케이스 기반 단위 테스트 실행 (test.md가 있는 경우)
 4. **커버리지 확인**: 핵심 경로 커버리지 기준 충족 여부 확인
@@ -334,7 +338,7 @@ src 경로: `{src_path}/`
 
 ```
 for step_num, modules in result_steps:
-  worker_count = min(len(modules), args.workers or len(modules))
+  worker_count = min(len(modules), args.workers or len(modules), 20)
 
   # /team 호출
   # 각 모듈별 워커 프롬프트를 구성하여 /team {worker_count}:deep-executor 에 전달
