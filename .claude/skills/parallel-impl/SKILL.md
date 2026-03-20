@@ -408,6 +408,9 @@ implementation-guide.md의 모든 원칙을 준수하여 소스 코드를 작성
   - 커널+유저 공유: `src/shared/include/dlp_product_names.h`
   - 유저모드 전용: `src/common/include/dlp_service_constants.h`
   - 설정 값(서버 URL, 간격, 경로 등)은 설정 파일에서 런타임 로드
+- **반환값 검증 필수**: 모든 API/시스템 호출(CreateFile, WriteFile, RegOpenKeyEx 등)의 반환값을 검증한다. 반환값을 의도적으로 무시하는 경우 `(void)` 캐스트 + 사유 주석을 명시한다
+- **핸들/리소스 해제**: CreateEvent, CreateFile, CreateMutex 등으로 생성한 핸들은 모든 경로(정상+에러+조기 반환)에서 CloseHandle로 해제한다. RAII 래퍼(unique_handle 등) 사용을 권장한다
+- **잠금 보호 데이터 접근**: 락으로 보호되는 자료구조에서 획득한 포인터는 락 보유 중에만 역참조한다. 락 해제 후 사용이 필요하면 락 보유 중에 로컬 변수로 deep copy한 후 락을 해제한다
 
 src 경로: `{src_path}/`
 플랫폼: {cpp | springboot}
@@ -419,7 +422,11 @@ src 경로: `{src_path}/`
 1. **빌드 검증**: `tools/build.ps1 -Module {MODULE_ID}` 실행 → 컴파일 에러 0건 확인
    - Linux/macOS: `tools/build.sh --module {MODULE_ID}`
    - tools/build.ps1이 없으면 플랫폼별 직접 빌드 (fallback)
-2. **정적 분석**: 정적 분석 도구 실행 → 경고 목록 수집
+2. **정적 분석**: 도구 실행 + 아래 패턴을 코드 리뷰로 추가 확인
+   - 반환값을 변수에 저장했으나 if/switch로 검증하지 않는 코드
+   - 에러 경로(if FAILED, catch 등)에서 로그 출력 없이 반환하는 코드
+   - 핸들 생성 후 조기 return/break 경로에서 CloseHandle 누락
+   - 잠금 해제 후 잠금 내에서 획득한 포인터를 역참조하는 코드
 3. **단위 테스트**: test.md의 테스트 케이스 기반 단위 테스트 실행 (test.md가 있는 경우)
 4. **커버리지 확인**: 핵심 경로 커버리지 기준 충족 여부 확인
 
