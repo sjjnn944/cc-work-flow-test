@@ -7,4 +7,4 @@ if errorlevel 1 (
 )
 
 echo Starting Claude...
-claude.cmd --dangerously-skip-permissions
+claude.exe --dangerously-skip-permissions

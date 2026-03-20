@@ -43,7 +43,7 @@ doc/develop/ 내 모듈들을 탐색하고, interface.md의 소유권/참조 관
 
 1. `doc/base/detailed-design-guide.md` 존재 확인 — 없으면 중단
 2. `.temp/` 디렉토리 확인 — 없으면 `mkdir -p .temp`
-3. `.temp/step-*.md` 기존 파일이 있으면 사용자에게 덮어쓰기 여부 확인 (AskUserQuestion)
+3. `.temp/step-*.md` 기존 파일이 있으면 자동으로 덮어쓴다 (별도 확인 없이 진행)
 
 ## Step 1: 모듈 탐색 (Discovery)
 
@@ -340,9 +340,9 @@ DLP_IPC_HEADER 및 IPC_MSG_* 코드를 공유 헤더로 참조한다.
 - 모듈이 `doc/develop/agt/` 하위 → `doc/base/detailed-designs/cpp.md`
 - 모듈이 `doc/develop/svr/` 하위 → `doc/base/detailed-designs/springboot.md`
 
-## Step 5: 사용자 확인
+## Step 5: 실행 계획 요약
 
-.temp/ 파일 생성 후, 사용자에게 실행 계획을 요약 보고한다:
+.temp/ 파일 생성 후, 실행 계획을 요약 출력한다.
 
 ```
 === parallel-design 실행 계획 ===
@@ -359,9 +359,11 @@ Step 02: {M}개 모듈 (Step 01 완료 후 실행)
 .temp/ 생성 파일:
   - .temp/step-01-design-batch.md
   - .temp/step-02-design-batch.md
-
-진행하시겠습니까?
 ```
+
+**조건부 승인:**
+- 건너뛴 모듈이 **0개** → 요약 출력 후 자동으로 Step 6 진행
+- 건너뛴 모듈이 **1개 이상** → skip 목록 + 사유를 표시하고 AskUserQuestion으로 진행 여부 확인
 
 `--dry-run` 인 경우 "실행하지 않음 (dry-run 모드)" 출력 후 종료한다.
 
@@ -485,9 +487,9 @@ for step_num, modules in result_steps:
         overlap = s1.fr_list & s2.fr_list
         if overlap: report "FR 중복: {overlap} in {s1.domain} & {s2.domain}"
 
-  # 실패율 확인
-  if failed_count > len(tasks) / 2:
-    AskUserQuestion: "Step {step_num}에서 50% 이상 실패. 다음 step 진행?"
+  # 실패 확인
+  if failed_count > 0:
+    AskUserQuestion: "Step {step_num}에서 {failed_count}건 실패. 실패 목록 + 사유를 표시. 다음 step 진행?"
 
   # 다음 step으로 진행
 ```
@@ -516,7 +518,7 @@ Step 02: {success}/{total} 완료
 <Escalation_And_Stop_Conditions>
 - **순환 의존성 감지**: 관련 모듈 목록 출력 후 즉시 중단
 - **interface.md/requirement.md 누락**: 해당 모듈만 skip + 경고 (나머지 계속 진행)
-- **step 내 50% 이상 실패**: 다음 step 진행 여부 사용자 확인
+- **step 내 1건 이상 실패**: 실패 목록 + 사유를 표시하고 다음 step 진행 여부 사용자 확인
 - **설계 가이드 누락** (`doc/base/detailed-design-guide.md`): 즉시 중단
 - **사용자 "중단" 요청**: 현재 step 완료 후 중단 (진행 중인 워커는 완료까지 대기)
 </Escalation_And_Stop_Conditions>

@@ -45,7 +45,7 @@ description: 구현 완료된 소스 코드 기반으로 기존 test.md의 TC를
 1. `doc/base/test-design-guide.md` 존재 확인 — 없으면 즉시 중단
 2. `src/` 디렉토리 존재 확인 — 없으면 "소스 코드가 없습니다. 구현 완료 후 실행하세요." 출력 후 중단
 3. `.temp/` 디렉토리 확인 — 없으면 `mkdir -p .temp`
-4. `.temp/step-*-test-review-batch.md` 기존 파일이 있으면 사용자에게 덮어쓰기 여부 확인
+4. `.temp/step-*-test-review-batch.md` 기존 파일이 있으면 자동으로 덮어쓴다 (별도 확인 없이 진행)
 
 ## Step 1: 모듈 탐색 (Discovery)
 
@@ -137,7 +137,7 @@ SVR: {M}개 모듈 (소스 파일 {Y}개)
 (다음 모듈 반복)
 ```
 
-## Step 4: 사용자 확인
+## Step 4: 실행 계획 요약
 
 ```
 === parallel-test-review 실행 계획 ===
@@ -150,9 +150,11 @@ Step 02: {M}개 모듈 (SVR, 병렬 실행)
 .temp/ 생성 파일:
   - .temp/step-01-test-review-batch.md
   - .temp/step-02-test-review-batch.md
-
-진행하시겠습니까?
 ```
+
+**조건부 승인:**
+- 건너뛴 모듈이 **0개** → 요약 출력 후 자동으로 Step 5 진행
+- 건너뛴 모듈이 **1개 이상** → skip 목록 + 사유를 표시하고 AskUserQuestion으로 진행 여부 확인
 
 `--dry-run` 인 경우 종료.
 
@@ -244,7 +246,7 @@ Step 02: {M}개 모듈 (SVR, 병렬 실행)
 
 ### 5.2 실행 순서
 
-/parallel-test와 동일 (배치 순차, 배치 내 병렬, 50% 실패 시 사용자 확인).
+/parallel-test와 동일 (배치 순차, 배치 내 병렬, 1건 이상 실패 시 실패 목록 + 사유를 표시하고 사용자 확인).
 
 ### 5.3 결과 보고
 
@@ -275,7 +277,7 @@ Step 02 (SVR): {success}/{total} 완료
 - **소스 코드 미존재** (`src/` 디렉토리 없음): 즉시 중단, 구현 완료 후 재실행 안내
 - **test.md 미존재**: 해당 모듈만 skip + "/parallel-test로 먼저 생성" 안내
 - **대응 소스 파일 없음**: 해당 모듈만 skip + 경고
-- **배치 내 50% 이상 실패**: 다음 배치 진행 여부 사용자 확인
+- **배치 내 1건 이상 실패**: 실패 목록 + 사유를 표시하고 다음 배치 진행 여부 사용자 확인
 </Escalation_And_Stop_Conditions>
 
 <Examples>

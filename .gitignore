@@ -1,75 +1,59 @@
-# === Python ===
-__pycache__/
-*.py[cod]
-*$py.class
-*.egg-info/
-dist/
-build/
-*.egg
-venv/
-.venv/
-pip-log.txt
+# === Common ===
+.temp/
+*.log
 
-# === C/C++ ===
+# === C++/CMake ===
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
 *.o
 *.obj
-*.exe
-*.dll
 *.so
 *.dylib
-*.lib
+*.dll
 *.a
+*.lib
+*.exe
 *.out
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
+*.pdb
+*.ilk
+*.exp
+compile_commands.json
+.cache/
+.vs/
+*.vcxproj.user
+# vcpkg
+vcpkg_installed/
 
-# === Java ===
-*.class
-*.jar
-*.war
-target/
-.gradle/
-build/
+# Third-party libraries (project-local)
+thirdparty/
+!thirdparty/.gitkeep
 
-# === Node.js ===
+# === WDK Driver ===
+*.sys
+*.cer
+*.cat
+
+# === React/Vite ===
 node_modules/
+dist/
+.vite/
+*.js.map
+*.tsbuildinfo
+coverage/
+.env
+.env.local
+.env.*.local
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
+pnpm-debug.log*
 
 # === IDE ===
 .idea/
-.vscode/
+.vscode/settings.json
 *.swp
-*.swo
 *~
-.project
-.classpath
-.settings/
-*.suo
-*.user
-*.userosscache
-*.sln.docstates
-
-# === OS ===
-.DS_Store
-Thumbs.db
-Desktop.ini
-
-# === Testing ===
-.coverage
-htmlcov/
-.pytest_cache/
-coverage.xml
-*.gcno
-*.gcda
-*.gcov
-
-# === Project ===
-logs/
-.temp/
-*.log
-.omc/
-nul
