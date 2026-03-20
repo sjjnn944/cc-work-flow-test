@@ -35,7 +35,7 @@ description: 구현 완료된 소스 코드 기반으로 기존 test.md의 TC를
 | subsystem | (전체) | `agt` 또는 `svr` — 특정 서브시스템만 대상 |
 | --dry-run | false | .temp/ 파일만 생성하고 실행하지 않음 |
 | --workers N | (배치 내 모듈 수) | 배치당 병렬 워커 수 제한 (최대 20) |
-| --impl | false | 추가 TC에 대한 테스트 코드를 test/ 디렉토리에 생성 |
+| --impl | true | 추가 TC에 대한 테스트 코드를 test/ 디렉토리에 생성 (`--no-impl`로 비활성화) |
 </Arguments>
 
 <Steps>
@@ -283,44 +283,47 @@ Step 02 (SVR): {success}/{total} 완료
 <Examples>
 
 <Good>
-전체 모듈 TC 리뷰:
+전체 모듈 TC 리뷰 (skip 없음 → 자동 진행, --impl 기본 활성):
 ```
 사용자: /parallel-test-review
 스킬: 24개 모듈 탐색. src/ 매핑 완료.
       Step 01: AGT 15개 모듈 (병렬 실행)
       Step 02: SVR 9개 모듈 (병렬 실행)
-      진행하시겠습니까?
-사용자: 진행
-스킬: Step 01 완료... 15/15
+      건너뛴 모듈: 0개
+      --impl 활성: 추가 TC의 테스트 코드를 test/에 생성합니다.
+      자동 진행합니다.
+      Step 01 완료... 15/15
       Step 02 완료... 9/9
       TC 총계: 1058 (TEST 1040, REVIEW 18), 신규 추가 12개
+      테스트 코드 생성: 10개 파일, 12개 TC 구현
 ```
 </Good>
 
 <Good>
-AGT만 리뷰:
+AGT만 리뷰 (skip 없음 → 자동 진행):
 ```
 사용자: /parallel-test-review agt
 스킬: AGT 15개 모듈 탐색. src/ 매핑 완료.
       Step 01: 15개 모듈 (병렬 실행)
-      진행하시겠습니까?
+      건너뛴 모듈: 0개
+      --impl 활성: 추가 TC의 테스트 코드를 test/에 생성합니다.
+      자동 진행합니다.
 ```
 </Good>
 
 <Good>
-TC 리뷰 + 추가 TC 구현:
+TC 리뷰 without 추가 TC 구현 (--no-impl):
 ```
-사용자: /parallel-test-review --impl
+사용자: /parallel-test-review --no-impl
 스킬: 24개 모듈 탐색. src/ 매핑 완료.
       Step 01: AGT 15개 모듈 (병렬 실행)
       Step 02: SVR 9개 모듈 (병렬 실행)
-      --impl 활성: 추가 TC의 테스트 코드를 test/에 생성합니다.
-      진행하시겠습니까?
-사용자: 진행
-스킬: Step 01 완료... 15/15
+      건너뛴 모듈: 0개
+      --impl 비활성: 테스트 코드 생성을 건너뜁니다.
+      자동 진행합니다.
+      Step 01 완료... 15/15
       Step 02 완료... 9/9
       TC 총계: 1058 (TEST 1040, REVIEW 18), 신규 추가 12개
-      테스트 코드 생성: 10개 파일, 12개 TC 구현
 ```
 </Good>
 
@@ -349,7 +352,7 @@ test.md 없이 실행:
 - **Bash 도구**: `.temp/` 디렉토리 생성
 - **Write 도구**: `.temp/step-{NN}-test-review-batch.md` 생성
 - **Edit 도구**: 워커가 기존 test.md에 검증 방법 컬럼 추가 시
-- **AskUserQuestion**: 실행 확인, 덮어쓰기 확인
+- **AskUserQuestion**: skip 발생 시 진행 확인, 실패 발생 시 계속 진행 여부
 - **Skill 도구**: `/team N:deep-executor` 호출로 배치 내 병렬 실행
 </Tool_Usage>
 

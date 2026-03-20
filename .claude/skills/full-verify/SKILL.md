@@ -542,14 +542,14 @@ FAIL 상세:
 <Examples>
 
 <Good>
-전체 프로젝트 검증:
+전체 프로젝트 검증 (문서 누락 없음 → 자동 진행):
 ```
 사용자: /full-verify
 스킬: src/, test/, verification-guide.md 확인 완료.
       모듈 24개 (AGT: 15개, SVR: 9개)
-      7단계 검증 수행. 진행하시겠습니까?
-사용자: 진행
-스킬: Step 2 정적 분석 실행 중... /team 15:deep-executor (AGT) + /team 9:deep-executor (SVR)
+      문서 누락 경고: 0개
+      7단계 검증 수행. 자동 진행합니다.
+      Step 2 정적 분석 실행 중... /team 15:deep-executor (AGT) + /team 9:deep-executor (SVR)
       → 정적 분석: PASS 22개, FAIL 2개 (CORE: 3건, API: 1건)
       Step 3 코드 리뷰... REVIEW TC 18개 중 PASS 18개
       Step 4 빌드 검증... AGT PASS, SVR PASS
@@ -563,12 +563,13 @@ FAIL 상세:
 </Good>
 
 <Good>
-개발 환경 (배포/보안 생략):
+개발 환경 (배포/보안 생략, 문서 누락 없음 → 자동 진행):
 ```
 사용자: /full-verify agt --skip-deploy --skip-security
 스킬: AGT 15개 모듈 대상. 배포/보안 검증 생략.
+      문서 누락 경고: 0개
       5단계 수행 (정적분석, 코드리뷰, 빌드, 테스트, 문서정합성).
-      진행하시겠습니까?
+      자동 진행합니다.
 ```
 </Good>
 
@@ -615,7 +616,7 @@ verification-guide.md 없이 실행:
 - **Grep 도구**: test.md에서 REVIEW TC 항목 수집, FR/Interface→TC 매핑 누락 탐지
 - **Bash 도구**: `.temp/` 디렉토리 생성, 빌드/테스트/커버리지 명령 실행
 - **Write 도구**: 검증 보고서(`--report-path`) 생성
-- **AskUserQuestion**: 실행 확인, 보고서 덮어쓰기 확인, 배포 환경 접근 불가 시 계속 진행 여부
+- **AskUserQuestion**: 문서 누락 경고 시 진행 확인, 배포 환경 접근 불가 시 계속 진행 여부, 배치 실패 시 계속 진행 여부
 - **Skill 도구**: `/team N:deep-executor` 호출로 정적 분석(Step 2), 코드 리뷰(Step 3), 문서 정합성(Step 8) 병렬 실행
 </Tool_Usage>
 

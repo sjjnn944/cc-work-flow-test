@@ -526,15 +526,15 @@ Step 02: {success}/{total} 완료
 <Examples>
 
 <Good>
-전체 모듈 병렬 설계:
+전체 모듈 병렬 설계 (skip 없음 → 자동 진행):
 ```
 사용자: /parallel-design
 스킬: 24개 모듈 탐색 완료. 6개 의존성 발견.
       Step 01: 18개 모듈 (독립), Step 02: 6개 모듈 (소비자)
+      건너뛴 모듈: 0개
       .temp/step-01-design-batch.md, step-02-design-batch.md 생성 완료.
-      진행하시겠습니까?
-사용자: 진행
-스킬: Step 01 실행 중... /team 18:deep-executor
+      자동 진행합니다.
+      Step 01 실행 중... /team 18:deep-executor
       → 18/18 완료
       Step 02 실행 중... /team 6:deep-executor
       → 6/6 완료
@@ -543,12 +543,13 @@ Step 02: {success}/{total} 완료
 </Good>
 
 <Good>
-AGT만 선택:
+AGT만 선택 (skip 없음 → 자동 진행):
 ```
 사용자: /parallel-design agt
 스킬: AGT 14개 모듈 탐색 완료. 5개 의존성 발견.
       Step 01: 9개 모듈, Step 02: 5개 모듈
-      .temp/ 파일 생성 완료. 진행하시겠습니까?
+      건너뛴 모듈: 0개
+      .temp/ 파일 생성 완료. 자동 진행합니다.
 ```
 </Good>
 
@@ -563,27 +564,34 @@ dry-run으로 계획만 확인:
 </Good>
 
 <Good>
-일부 모듈이 이미 설계된 경우:
+일부 모듈이 이미 설계된 경우 (skip 있음 → 승인 요청):
 ```
 사용자: /parallel-design agt
 스킬: AGT 14개 모듈 탐색. 3개 이미 설계 완료 (CORE, DRVDEV, CLIP).
       대상: 11개 모듈. 의존성 재분석...
       Step 01: 6개 모듈, Step 02: 5개 모듈
+
+      건너뛴 모듈: 3개
+        - AGT.CORE: implementation.md 이미 존재
+        - AGT.DRVDEV: implementation.md 이미 존재
+        - AGT.CLIP: implementation.md 이미 존재
+
       진행하시겠습니까?
+사용자: 진행
 ```
 </Good>
 
 <Good>
-대형 모듈 자동 분할:
+대형 모듈 자동 분할 (skip 없음 → 자동 진행):
 ```
 사용자: /parallel-design svr
 스킬: SVR 10개 모듈 탐색 완료.
       대형 모듈 감지: SVR.SVCCORE (31 FR, 18 REST endpoints)
         → 6개 서브태스크로 분할: core, auth, policy-agent, audit, security, approval-report
       Step 01: 10개 모듈 (4개 일반 + 6개 서브태스크)
-      .temp/ 파일 생성 완료. 진행하시겠습니까?
-사용자: 진행
-스킬: Step 01 실행 중... /team 10:deep-executor
+      건너뛴 모듈: 0개
+      .temp/ 파일 생성 완료. 자동 진행합니다.
+      Step 01 실행 중... /team 10:deep-executor
       → 10/10 완료 (SVR.SVCCORE: implementation/core.md~approval-report.md 6개 생성)
 ```
 </Good>
@@ -621,7 +629,7 @@ typedef struct _DLP_IPC_HEADER { ... }  # ← 단일 원천 원칙 위반
 - **Read 도구**: interface.md 파싱 (소유권, 참조 경로 추출), requirement.md 존재 확인
 - **Bash 도구**: `.temp/` 디렉토리 생성 (`mkdir -p`)
 - **Write 도구**: `.temp/step-{NN}-design-batch.md` 생성
-- **AskUserQuestion**: 실행 확인, 덮어쓰기 확인, 실패 시 계속 진행 여부
+- **AskUserQuestion**: skip 발생 시 진행 확인, 실패 발생 시 계속 진행 여부, 플레이스홀더 확정 불가 시 사용자 결정
 - **Skill 도구**: `/team N:deep-executor` 호출로 배치 내 병렬 실행
 - **Grep 도구**: 생성된 implementation.md에서 프로토콜 인라인 복사 여부 검증
 </Tool_Usage>

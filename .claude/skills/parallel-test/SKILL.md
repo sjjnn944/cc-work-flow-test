@@ -321,16 +321,16 @@ Step 02 (SVR): {success}/{total} 완료
 <Examples>
 
 <Good>
-전체 모듈 병렬 테스트 설계:
+전체 모듈 병렬 테스트 설계 (skip 없음 → 자동 진행):
 ```
 사용자: /parallel-test
 스킬: 24개 모듈 탐색 완료.
       Step 01: AGT 14개 모듈 (병렬 실행)
       Step 02: SVR 10개 모듈 (병렬 실행)
+      건너뛴 모듈: 0개
       .temp/step-01-test-batch.md, step-02-test-batch.md 생성 완료.
-      진행하시겠습니까?
-사용자: 진행
-스킬: Step 01 실행 중... /team 14:deep-executor
+      자동 진행합니다.
+      Step 01 실행 중... /team 14:deep-executor
       → 14/14 완료
       Step 02 실행 중... /team 10:deep-executor
       → 10/10 완료
@@ -339,12 +339,13 @@ Step 02 (SVR): {success}/{total} 완료
 </Good>
 
 <Good>
-AGT만 선택:
+AGT만 선택 (skip 없음 → 자동 진행):
 ```
 사용자: /parallel-test agt
 스킬: AGT 14개 모듈 탐색 완료.
       Step 01: 14개 모듈 (병렬 실행)
-      .temp/ 파일 생성 완료. 진행하시겠습니까?
+      건너뛴 모듈: 0개
+      .temp/ 파일 생성 완료. 자동 진행합니다.
 ```
 </Good>
 
@@ -359,24 +360,32 @@ dry-run으로 계획만 확인:
 </Good>
 
 <Good>
-일부 모듈이 이미 테스트 설계된 경우:
+일부 모듈이 이미 테스트 설계된 경우 (skip 있음 → 승인 요청):
 ```
 사용자: /parallel-test agt
 스킬: AGT 14개 모듈 탐색. 3개 이미 test.md 존재 (CORE, DRVDEV, CLIP).
       대상: 11개 모듈.
       Step 01: 11개 모듈 (병렬 실행)
+
+      건너뛴 모듈: 3개
+        - AGT.CORE: test.md 이미 존재
+        - AGT.DRVDEV: test.md 이미 존재
+        - AGT.CLIP: test.md 이미 존재
+
       진행하시겠습니까?
+사용자: 진행
 ```
 </Good>
 
 <Good>
-워커 수 제한:
+워커 수 제한 (skip 없음 → 자동 진행):
 ```
 사용자: /parallel-test --workers 10
 스킬: 24개 모듈 탐색 완료.
       Step 01: AGT 14개 모듈 (10 워커로 실행)
       Step 02: SVR 10개 모듈 (10 워커로 실행)
-      진행하시겠습니까?
+      건너뛴 모듈: 0개
+      자동 진행합니다.
 ```
 </Good>
 
@@ -404,7 +413,7 @@ implementation.md 없이 실행:
 - **Read 도구**: interface.md 파싱 (소유권, 참조 경로 추출), requirement.md/implementation.md 존재 확인
 - **Bash 도구**: `.temp/` 디렉토리 생성 (`mkdir -p`)
 - **Write 도구**: `.temp/step-{NN}-test-batch.md` 생성
-- **AskUserQuestion**: 실행 확인, 덮어쓰기 확인, 실패 시 계속 진행 여부
+- **AskUserQuestion**: skip 발생 시 진행 확인, 실패 발생 시 계속 진행 여부
 - **Skill 도구**: `/team N:deep-executor` 호출로 배치 내 병렬 실행
 - **Grep 도구**: 생성된 test.md에서 FR→TC 매핑 누락, Interface→TC 매핑 누락 검증
 </Tool_Usage>

@@ -48,7 +48,9 @@ doc/develop/ 내 모듈들을 탐색하고, interface.md의 소유권/참조 관
 1. `doc/base/implementation-guide.md` 존재 확인 — 없으면 중단
 2. `doc/architecture/module-mapping.md` 존재 확인 — 없으면 중단 (src 경로 해석 불가)
 3. `.temp/` 디렉토리 확인 — 없으면 `mkdir -p .temp`
-4. `.temp/step-*-impl-batch.md` 기존 파일이 있으면 자동으로 덮어쓴다 (별도 확인 없이 진행)
+4. `.temp/impl-results/` 디렉토리 확인 — 없으면 `mkdir -p .temp/impl-results`
+5. `.temp/step-*-impl-batch.md` 기존 파일이 있으면 자동으로 덮어쓴다 (별도 확인 없이 진행)
+6. `.temp/impl-results/*.result.md`, `step-*-summary.md`, `execution-report.md` 기존 파일이 있으면 덮어쓴다
 
 ## Step 1: 모듈 탐색 (Discovery)
 
@@ -430,7 +432,35 @@ src 경로: `{src_path}/`
 
 ## 결과 보고
 
-워커는 작업 완료 후 다음 항목을 보고한다:
+워커는 작업 완료 후 반드시 결과 파일을 `.temp/impl-results/{MODULE_ID}.result.md`에 생성한다.
+(예: AGT.CORE → `.temp/impl-results/AGT.CORE.result.md`)
+`.temp/impl-results/` 디렉토리가 없으면 먼저 생성한다.
+
+파일 형식:
+```markdown
+---
+module: {MODULE_ID}
+status: SUCCESS | PARTIAL | FAILED
+build: PASS | FAIL
+test: {통과}/{전체} PASS | SKIP
+static_analysis: {N} warnings
+timestamp: {ISO 8601}
+---
+
+## 빌드 결과
+(빌드 로그 요약 — 성공 시 1줄, 실패 시 에러 메시지 전문)
+
+## 테스트 결과
+(테스트 실행 결과 요약)
+
+## 정적 분석
+(경고 목록)
+
+## 실패 사유 (실패 시만)
+(구체적 실패 원인 + 관련 파일/라인)
+```
+
+추가로 콘솔에도 다음 항목을 보고한다:
 - 구현 완료 파일 목록 (경로 포함)
 - 빌드 결과: 성공 | 실패 (에러 메시지 포함)
 - 정적 분석 경고 수 및 주요 항목
@@ -449,11 +479,45 @@ for step_num, modules in result_steps:
   invoke "/team {worker_count}:deep-executor" with:
     각 워커에게 모듈별 프롬프트 할당
 
-  # 완료 대기 및 결과 검증
+  # 완료 대기 및 결과 검증 (Result File Parsing)
   for each module in modules:
+    result_file = ".temp/impl-results/{MODULE_ID}.result.md"
+    if not exists(result_file):
+      module.status = "NO_REPORT"  # 워커가 결과 파일을 생성하지 않음
+      module.build = "UNKNOWN"
+      module.test = "UNKNOWN"
+      module.static_analysis = "UNKNOWN"
+      add to failed list with reason "워커 결과 파일 미생성"
+    else:
+      parse frontmatter → extract status, build, test, static_analysis
+      module.status = parsed.status
+      module.build = parsed.build
+      module.test = parsed.test
+      module.static_analysis = parsed.static_analysis
+      if module.status in ["FAILED", "PARTIAL"]:
+        add to failed list with reason from "## 실패 사유" section
+
+    # src 파일 존재도 추가 검증
     verify src files exist in {src_path}/
-    if missing: report failure, add to failed list
-    collect build result, test result, static analysis warnings
+    if missing and module.status != "FAILED":
+      module.status = "NO_SRC"
+      add to failed list with reason "src 파일 미생성"
+
+  # Step 요약 파일 생성
+  Write ".temp/impl-results/step-{NN}-summary.md":
+    ```markdown
+    # Step {step_num} 실행 결과
+
+    > 실행 시각: {timestamp}
+    > 대상 모듈: {total}개
+
+    | 모듈 | 상태 | 빌드 | 테스트 | 정적분석 | 비고 |
+    |------|------|------|--------|---------|------|
+    | {MODULE_ID} | {status} | {build} | {test} | {static_analysis} | {failure_reason or ""} |
+    ...
+
+    성공: {success_count}/{total}, 실패: {failed_count}/{total}
+    ```
 
   # 실패 확인
   if failed_count > 0:
@@ -463,6 +527,40 @@ for step_num, modules in result_steps:
 ```
 
 ### 7.3 결과 보고
+
+모든 Step 완료 후 `.temp/impl-results/execution-report.md`를 생성한다:
+
+```markdown
+# parallel-impl 실행 보고서
+
+## 실행 개요
+- 실행 일시: {timestamp}
+- 총 모듈: {total}개 ({success} 성공 / {failed} 실패 / {skipped} 건너뜀)
+- 총 Step: {step_count}개
+
+## Step별 결과
+
+| Step | 성공 | 실패 | 상세 |
+|------|------|------|------|
+| Step 01 | {success}/{total} | {failed} | [step-01-summary.md](step-01-summary.md) |
+| Step 02 | {success}/{total} | {failed} | [step-02-summary.md](step-02-summary.md) |
+
+## Phase A 검증 집계
+- 빌드: {build_pass}/{build_total} 성공
+- 테스트: {test_pass}/{test_total} 통과
+- 정적 분석 경고: {warn_total}건
+
+## 실패 모듈 상세
+
+| 모듈 | 상태 | 실패 사유 | 의존 영향 |
+|------|------|----------|-----------|
+| {MODULE_ID} | {status} | {failure_reason} | {이 모듈에 의존하는 모듈 목록} |
+
+## full-verify 전달 사항
+(Step 8에서 추가 확인이 필요한 항목 — PARTIAL 모듈, 높은 경고 수 모듈 등)
+```
+
+생성 후 콘솔에도 요약을 출력한다:
 
 ```
 === parallel-impl 완료 ===
@@ -486,6 +584,8 @@ Phase A 검증 요약:
 {정적 분석 경고가 있으면:}
 정적 분석 경고 주요 항목:
   - {MODULE_ID}: {경고 내용} ({건수}건)
+
+상세 보고서: .temp/impl-results/execution-report.md
 ```
 
 </Steps>
@@ -497,6 +597,7 @@ Phase A 검증 요약:
 - **implementation-guide.md 누락**: 즉시 중단 (구현 원칙 없이 진행 불가)
 - **빌드 환경 미준비**: 빌드 스크립트 실행 실패 시 워커가 보고 → 사용자에게 에스컬레이션
 - **step 내 1건 이상 실패**: 실패 목록 + 사유를 표시하고 다음 step 진행 여부 사용자 확인
+- **NO_REPORT (워커 결과 파일 미생성)**: 워커가 `.temp/impl-results/{MODULE_ID}.result.md`를 생성하지 않은 경우 — 해당 모듈을 FAILED(NO_REPORT)로 기록하고, step-summary에 "워커 결과 파일 미생성" 사유를 명시. src 파일 존재 여부를 추가 확인하여 실제 구현은 완료되었으나 보고만 누락된 경우(PARTIAL)와 구현 자체가 실패한 경우(FAILED)를 구분한다
 - **사용자 "중단" 요청**: 현재 step 완료 후 중단 (진행 중인 워커는 완료까지 대기)
 </Escalation_And_Stop_Conditions>
 
@@ -626,4 +727,8 @@ Phase A 검증 없이 완료 보고:
 - [ ] step 간 순차 실행이 보장되는가? (step 01 완료 후 step 02 실행)
 - [ ] 결과 보고에 빌드 성공/실패, 테스트 통과/전체, 정적 분석 경고 수가 집계되었는가?
 - [ ] 결과 보고에 성공/실패/skip 수가 정확히 집계되었는가?
+- [ ] 워커 프롬프트에 `.temp/impl-results/{MODULE_ID}.result.md` 생성 지시가 포함되었는가?
+- [ ] 각 Step 완료 후 `.temp/impl-results/step-{NN}-summary.md`가 생성되었는가?
+- [ ] 모든 Step 완료 후 `.temp/impl-results/execution-report.md`가 생성되었는가?
+- [ ] NO_REPORT(워커 결과 파일 미생성) 상태가 올바르게 FAILED로 기록되었는가?
 </Final_Checklist>
