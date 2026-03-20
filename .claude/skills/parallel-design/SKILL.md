@@ -33,6 +33,8 @@ doc/develop/ 내 모듈들을 탐색하고, interface.md의 소유권/참조 관
 | --force | false | 기존 implementation.md가 있어도 재작성 |
 | --dry-run | false | .temp/ 파일만 생성하고 실행하지 않음 |
 | --workers N | (배치 내 모듈 수) | 배치당 병렬 워커 수 제한 |
+| --no-split | false | 대형 모듈 자동 분할 비활성화 |
+| --split-threshold N | 15 | FR 기준 분할 임계값 |
 </Arguments>
 
 <Steps>
@@ -78,6 +80,60 @@ doc/develop/{sys}/{module}/interface.md  (category 없는 flat 구조)
 각 대상 모듈에 `requirement.md`가 존재하는지 확인.
 - 없으면 → 경고 출력 후 해당 모듈 skip
 
+## Step 1.5: 모듈 크기 분석 (Large Module Detection)
+
+`--no-split`이 아닌 경우, 각 대상 모듈의 requirement.md와 interface.md를 분석하여 대형 모듈을 감지하고 도메인별 분할 계획을 수립한다.
+
+**감지 기준** (requirement.md + interface.md에서 측정):
+- FR 행 수 >= `--split-threshold` (기본 15) → 분할 대상
+- FR 행 수 >= 10 AND REST endpoint 수 >= 10 → 분할 대상
+- 그 외 → 단일 모듈 유지
+
+**FR 행 수 측정:**
+```
+Grep 패턴: /^[\s]*FR-\d+/ 또는 /^\|[\s]*FR-\d+/
+대상: 각 모듈의 requirement.md
+```
+
+**REST endpoint 수 측정:**
+```
+Grep 패턴: /^\|[\s]*(GET|POST|PUT|DELETE|PATCH)/
+대상: 각 모듈의 interface.md
+```
+
+**도메인 클러스터링 알고리즘:**
+
+1. requirement.md의 FR 설명에서 키워드 매칭으로 도메인 분류:
+   ```
+   auth: 인증, 패스워드, 세션, 로그인, MFA, RBAC, 접속, IP 제한
+   policy: 정책, 배포
+   agent: 에이전트, 등록, 식별
+   audit: 감사, 로그, 감사기록, 사고
+   security: 암호화, 무결성, 자체시험, 업데이트, 서명, 롤백
+   approval: 승인, 반출, 결재
+   report: 보고서, 통계
+   ```
+2. 매칭 안 되는 FR → "core" 도메인에 할당
+3. FR 3개 미만인 도메인 → 가장 관련 높은 도메인에 병합
+4. 목표: 도메인당 5~12 FR
+5. 12 FR 초과 도메인 → 하위 키워드로 재분할
+
+**분할 계획 출력:**
+```
+=== 대형 모듈 분할 계획 ===
+SVR.SVCCORE (31 FR, 18 REST endpoints) → 6개 서브태스크:
+  - core (FR-001, FR-025): 부트스트랩 및 수명 주기
+  - auth (FR-002~010, FR-026~027): 인증 및 세션 관리
+  - policy-agent (FR-011~014, FR-028): 정책 CRUD/배포, 에이전트 관리
+  - audit (FR-015~019, FR-029): 감사 로그, 사고 자동생성
+  - security (FR-020~024): 암호화, 무결성, 업데이트
+  - approval-report (FR-030~031): 승인 워크플로우, 보고서
+```
+
+각 모듈 객체에 `split_plan` 속성을 추가:
+- 분할 대상 아님 → `split_plan = null`
+- 분할 대상 → `split_plan = { subtasks: [{ domain, fr_list, output_path }] }`
+
 ## Step 2: 의존성 분석 (Dependency Analysis)
 
 각 대상 모듈의 interface.md를 Read하여 의존 관계를 파싱한다.
@@ -114,6 +170,49 @@ doc/develop/{sys}/{module}/interface.md  (category 없는 flat 구조)
 subsystem 필터가 적용된 경우, 참조 대상이 필터 밖에 있으면:
 - 대상 owner의 interface.md는 이미 존재하므로 (scaffold 완료 상태)
 - 의존성은 "이미 충족"으로 간주 → consumer를 step-01에 배치 가능
+
+## Step 2.5: 입력 완성도 검증 게이트
+
+Step 2에서 파싱한 각 대상 모듈의 interface.md에 대해 플레이스홀더 잔존 여부를 검사한다.
+
+**검색 패턴:**
+```
+Grep 패턴: /\*\s*상세\s*설계\s*시\s*(확정|정의)|（미정）|\(미정\)|TBD|TODO.*설계/
+대상: 각 모듈의 interface.md
+```
+
+**발견 시 처리 절차:**
+
+1. **자동 확정 시도**: 설계서(scratch.md, `doc/architecture/` 내 문서)를 참조하여 플레이스홀더를 구체적 정의로 확정
+   - 설계서에 충분한 정보가 있으면 → interface.md에 확정된 정의를 반영
+   - 설계서에도 정보가 부족하면 → 2단계로 진행
+
+2. **사용자 결정 요청**: 자동 확정이 불가능한 경우 AskUserQuestion으로 사용자에게 구체적 선택지를 제시
+   ```
+   {MODULE_ID}의 interface.md에 미확정 플레이스홀더가 있습니다:
+   - 위치: line {N}
+   - 내용: {플레이스홀더 텍스트}
+
+   제안 선택지:
+   1. {선택지 A} (설계서 기반 추천)
+   2. {선택지 B}
+   3. 직접 입력
+
+   어떤 방식으로 확정하시겠습니까?
+   ```
+
+3. **확정 반영**: 사용자 결정에 따라 interface.md를 수정한 후 다음 단계로 진행
+
+**검증 결과 출력:**
+```
+=== 입력 완성도 검증 ===
+✓ AGT.CORE: interface.md 완전
+✓ AGT.DRVDEV: interface.md 완전
+✗ AGT.FSDRV: interface.md 플레이스홀더 1건 (line 41) → 확정 완료
+✗ AGT.NETDRV: interface.md 플레이스홀더 1건 (line 41) → 사용자 확정 대기
+```
+
+**중요:** 플레이스홀더가 미확정인 모듈은 implementation.md 작성 대상에서 제외하거나, 확정 후에만 진행한다.
 
 ## Step 3: 위상 정렬 (Topological Sort)
 
@@ -211,6 +310,32 @@ DLP_IPC_HEADER 및 IPC_MSG_* 코드를 공유 헤더로 참조한다.
 (다음 모듈 반복)
 ```
 
+**분할 대상 모듈의 기재 형식:**
+
+분할 대상 모듈은 기존 단일 항목 대신 서브태스크 목록으로 기재한다:
+
+```markdown
+### {N}. {MODULE_ID} — {모듈 설명} [분할: {K}개 서브태스크]
+
+- **역할**: 주체(Owner) | 소비자(Consumer) | 혼합(Mixed)
+- **doc 경로**: `{doc_path}/`
+- **requirement.md**: `{doc_path}/requirement.md`
+- **interface.md**: `{doc_path}/interface.md`
+- **플랫폼 참조**: `doc/base/detailed-designs/{cpp|springboot}.md`
+
+#### {N}.1 {MODULE_ID}/{domain} — {도메인 설명}
+- **담당 FR**: {fr_list}
+- **산출물**: `{doc_path}/implementation/{domain}.md`
+
+#### {N}.2 {MODULE_ID}/{domain} — {도메인 설명}
+- **담당 FR**: {fr_list}
+- **산출물**: `{doc_path}/implementation/{domain}.md`
+
+...(서브태스크 반복)
+
+---
+```
+
 **플랫폼 선택 규칙:**
 - 모듈이 `doc/develop/agt/` 하위 → `doc/base/detailed-designs/cpp.md`
 - 모듈이 `doc/develop/svr/` 하위 → `doc/base/detailed-designs/springboot.md`
@@ -224,6 +349,10 @@ DLP_IPC_HEADER 및 IPC_MSG_* 코드를 공유 헤더로 참조한다.
 
 Step 01: {N}개 모듈 (독립, 병렬 실행)
 Step 02: {M}개 모듈 (Step 01 완료 후 실행)
+
+{분할 대상 모듈이 있는 경우:}
+분할 대상: {K}개 모듈 → {S}개 서브태스크로 확장
+  - {MODULE_ID}: {subtask_count}개 서브태스크 ({fr_count} FR)
 
 건너뛴 모듈: {K}개 (implementation.md 이미 존재)
 
@@ -272,10 +401,37 @@ detailed-design-guide.md의 모든 필수 섹션을 포함하여 implementation.
 
 조건부 섹션: 상태 관리(상태 전이가 있는 경우), 스레드 모델(멀티스레딩 있는 경우)
 
+## 플레이스홀더 처리 (필수 준수)
+
+interface.md에 `/* 상세 설계 시 확정 */`, `(미정)`, `TBD` 등의 플레이스홀더가 남아 있으면
+implementation.md 작성 **전에** 반드시 확정하라.
+
+- 설계서(scratch.md, `doc/architecture/`)와 상위 모듈의 interface.md를 참조하여 구체적 정의를 도출
+- 확정 불가 시 작업을 중단하고 보고 (임의로 결정하지 않음)
+- 확정된 내용을 interface.md에 반영한 후 implementation.md 작성 진행
+
 ## 프로토콜 참조 원칙 (필수 준수)
 
 이 모듈이 소비자(Consumer)인 경우, 주체 모듈의 프로토콜 정의(struct, define, 메시지 코드 등)를
 implementation.md에 복사하지 말 것. 참조 경로만 기재하고 "단일 원천 원칙"을 준수할 것.
+
+## 작업 범위 (분할 서브태스크) — 분할 대상 모듈에만 추가
+
+이 모듈은 크기가 커서 도메인별로 분할 설계합니다.
+
+- **도메인**: {domain_name}
+- **담당 FR**: {fr_list}
+- **산출물**: `{doc_path}/implementation/{domain}.md`
+
+### 분할 작성 규칙
+
+1. 아키텍처 개요: 전체 모듈 다이어그램 포함, 본 도메인 컴포넌트 강조
+2. FR→컴포넌트 매핑: 담당 FR만 매핑
+3. 내부 클래스 설계: 본 도메인 클래스만 상세 (다른 도메인은 외부 의존 표시)
+4. 핵심 시퀀스: 담당 FR의 정상+오류 경로만 작성
+5. 교차 도메인 참조: "→ {domain}.md 참조" 형태로 경로만 기재 (정의 복사 금지)
+
+> 핵심: 모든 서브태스크에 전체 requirement.md + interface.md를 전달 (교차 참조 컨텍스트 유지), 단 **작성 범위만 제한**.
 
 ## 제외 사항
 
@@ -284,31 +440,59 @@ implementation.md에 복사하지 말 것. 참조 경로만 기재하고 "단일
 
 ## 산출물
 
-- `{doc_path}/implementation.md`
+- 일반 모듈: `{doc_path}/implementation.md`
+- 분할 서브태스크: `{doc_path}/implementation/{domain}.md`
 ```
 
 ### 6.2 실행 순서
 
 ```
 for step_num, modules in result_steps:
-  worker_count = min(len(modules), args.workers or len(modules), 20)
+  # 분할 대상 모듈을 서브태스크로 확장
+  tasks = []
+  for module in modules:
+    if module.split_plan:
+      tasks.extend(module.subtasks)  # 6개 서브태스크 → 6개 워커
+    else:
+      tasks.append(module)           # 일반 모듈 → 1개 워커
+
+  worker_count = min(len(tasks), args.workers or len(tasks), 20)
 
   # /team 호출
-  # 각 모듈별 워커 프롬프트를 구성하여 /team {worker_count}:deep-executor 에 전달
+  # 각 태스크별 워커 프롬프트를 구성하여 /team {worker_count}:deep-executor 에 전달
+  # 분할 서브태스크는 분할 작성 규칙이 포함된 프롬프트 사용
   invoke "/team {worker_count}:deep-executor" with:
-    각 워커에게 모듈별 프롬프트 할당
+    각 워커에게 태스크별 프롬프트 할당
 
   # 완료 대기 및 결과 검증
-  for each module in modules:
-    verify {doc_path}/implementation.md was created
+  for each task in tasks:
+    if task.is_subtask:
+      verify {doc_path}/implementation/{domain}.md was created
+    else:
+      verify {doc_path}/implementation.md was created
     if missing: report failure, add to failed list
 
+  # 분할 모듈 추가 검증
+  for each module in modules:
+    if module.split_plan:
+      # FR 합집합 == requirement.md 전체 FR (누락 검사)
+      all_fr = union(subtask.fr_list for subtask in module.subtasks)
+      missing_fr = requirement_fr - all_fr
+      if missing_fr: report "FR 누락: {missing_fr}"
+
+      # FR 교집합 == 공집합 (중복 검사)
+      for each pair (s1, s2) in module.subtasks:
+        overlap = s1.fr_list & s2.fr_list
+        if overlap: report "FR 중복: {overlap} in {s1.domain} & {s2.domain}"
+
   # 실패율 확인
-  if failed_count > len(modules) / 2:
+  if failed_count > len(tasks) / 2:
     AskUserQuestion: "Step {step_num}에서 50% 이상 실패. 다음 step 진행?"
 
   # 다음 step으로 진행
 ```
+
+동일 모듈의 서브태스크들은 **상호 독립** (FR 영역이 다름) → 병렬 실행 가능.
 
 ### 6.3 결과 보고
 
@@ -387,6 +571,30 @@ dry-run으로 계획만 확인:
 ```
 </Good>
 
+<Good>
+대형 모듈 자동 분할:
+```
+사용자: /parallel-design svr
+스킬: SVR 10개 모듈 탐색 완료.
+      대형 모듈 감지: SVR.SVCCORE (31 FR, 18 REST endpoints)
+        → 6개 서브태스크로 분할: core, auth, policy-agent, audit, security, approval-report
+      Step 01: 10개 모듈 (4개 일반 + 6개 서브태스크)
+      .temp/ 파일 생성 완료. 진행하시겠습니까?
+사용자: 진행
+스킬: Step 01 실행 중... /team 10:deep-executor
+      → 10/10 완료 (SVR.SVCCORE: implementation/core.md~approval-report.md 6개 생성)
+```
+</Good>
+
+<Good>
+분할 비활성화:
+```
+사용자: /parallel-design svr --no-split
+스킬: SVR 10개 모듈 탐색 완료. (대형 모듈 분할 비활성화)
+      Step 01: 10개 모듈
+```
+</Good>
+
 <Bad>
 의존성을 무시하고 모든 모듈을 한 배치에서 실행:
 ```
@@ -431,4 +639,8 @@ typedef struct _DLP_IPC_HEADER { ... }  # ← 단일 원천 원칙 위반
 - [ ] 각 implementation.md에 detailed-design-guide.md 필수 섹션이 모두 포함되었는가? (파생 요구사항, 아키텍처 개요, 추적성 테이블, 컴포넌트 설계, 핵심 시퀀스, 에러 처리 전략, 데이터 구조, 의존 상세)
 - [ ] 각 implementation.md의 핵심 시퀀스가 정상 경로와 오류 경로를 모두 포함하는가?
 - [ ] 소비자 모듈의 implementation.md가 참조하는 주체 모듈 인터페이스의 함수 시그니처/메시지 코드를 빠짐없이 사용하고 있는가?
+- [ ] FR >= split-threshold인 모듈이 분할 대상으로 식별되었는가?
+- [ ] 분할된 서브태스크의 FR 합집합 == requirement.md 전체 FR?
+- [ ] 분할된 서브태스크 간 FR 중복이 없는가?
+- [ ] 각 서브태스크 산출물이 `implementation/` 폴더 확장 규칙을 따르는가?
 </Final_Checklist>
