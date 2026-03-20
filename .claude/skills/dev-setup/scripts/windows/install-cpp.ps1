@@ -120,6 +120,31 @@ function Install-CppEnvironment {
         Refresh-PathEnv
     }
 
+    # --- clang-tidy (LLVM에 포함) ---
+    Write-Status "CHECK" "clang-tidy 확인 중..."
+    if (Test-CommandExists "clang-tidy") {
+        Write-Status "SKIP" "clang-tidy 이미 설치됨"
+    } elseif ($script:CheckOnly) {
+        Write-Status "FAIL" "clang-tidy 없음"
+    } else {
+        Write-Status "INSTALL" "LLVM 재설치 (clang-tidy 포함)..."
+        Install-WithWinget "LLVM.LLVM" "LLVM (clang-tidy)"
+        Refresh-PathEnv
+    }
+
+    # --- cppcheck ---
+    Write-Status "CHECK" "cppcheck 확인 중..."
+    if (Test-CommandExists "cppcheck") {
+        Write-Status "SKIP" "cppcheck 이미 설치됨"
+    } elseif ($script:CheckOnly) {
+        Write-Status "FAIL" "cppcheck 없음"
+    } else {
+        if (-not (Install-WithWinget "Cppcheck.Cppcheck" "cppcheck")) {
+            Install-WithChoco "cppcheck" "cppcheck"
+        }
+        Refresh-PathEnv
+    }
+
     # --- 빌드 검증 ---
     if (-not $script:CheckOnly) {
         Write-Host "`n=== 빌드 검증 ===" -ForegroundColor Magenta
@@ -130,7 +155,7 @@ function Install-CppEnvironment {
 
     # --- 검증 요약 ---
     Write-Host "`n=== 설치 검증 ===" -ForegroundColor Magenta
-    foreach ($tool in @("cmake --version", "ninja --version", "clang-format --version")) {
+    foreach ($tool in @("cmake --version", "ninja --version", "clang-format --version", "clang-tidy --version", "cppcheck --version")) {
         $cmd = $tool.Split(" ")[0]
         $arg = $tool.Split(" ")[1]
         if (Test-CommandExists $cmd) {

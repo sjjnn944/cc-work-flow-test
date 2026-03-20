@@ -60,6 +60,46 @@ function Install-DjangoEnvironment {
     Write-Host "  Django는 프로젝트별로 poetry를 통해 설치하세요:" -ForegroundColor Gray
     Write-Host "  > poetry new myproject && cd myproject && poetry add django" -ForegroundColor Gray
 
+    # ═══════════════════════════════════════
+    # 정적 분석 도구 설치
+    # ═══════════════════════════════════════
+
+    # --- ruff ---
+    Write-Status "CHECK" "ruff 확인 중..."
+    if (Test-CommandExists "ruff") {
+        Write-Status "SKIP" "ruff 이미 설치됨"
+    } elseif ($script:CheckOnly) {
+        Write-Status "FAIL" "ruff 없음"
+    } else {
+        Write-Status "INSTALL" "ruff 설치 중..."
+        python -m pip install ruff 2>&1 | Out-Null
+        Write-Status "OK" "ruff 설치 완료"
+    }
+
+    # --- mypy ---
+    Write-Status "CHECK" "mypy 확인 중..."
+    if (Test-CommandExists "mypy") {
+        Write-Status "SKIP" "mypy 이미 설치됨"
+    } elseif ($script:CheckOnly) {
+        Write-Status "FAIL" "mypy 없음"
+    } else {
+        Write-Status "INSTALL" "mypy 설치 중..."
+        python -m pip install mypy 2>&1 | Out-Null
+        Write-Status "OK" "mypy 설치 완료"
+    }
+
+    # --- Black ---
+    Write-Status "CHECK" "Black 확인 중..."
+    if (Test-CommandExists "black") {
+        Write-Status "SKIP" "Black 이미 설치됨"
+    } elseif ($script:CheckOnly) {
+        Write-Status "FAIL" "Black 없음"
+    } else {
+        Write-Status "INSTALL" "Black 설치 중..."
+        python -m pip install black 2>&1 | Out-Null
+        Write-Status "OK" "Black 설치 완료"
+    }
+
     # --- 검증 요약 ---
     Write-Host "`n=== 설치 검증 ===" -ForegroundColor Magenta
     if (Test-CommandExists "python") {
@@ -79,6 +119,24 @@ function Install-DjangoEnvironment {
         Write-Status "OK" "poetry: $v"
     } else {
         Write-Status "FAIL" "poetry: 찾을 수 없음"
+    }
+    if (Test-CommandExists "ruff") {
+        $v = & ruff --version 2>&1 | Select-Object -First 1
+        Write-Status "OK" "ruff: $v"
+    } else {
+        Write-Status "FAIL" "ruff: 찾을 수 없음"
+    }
+    if (Test-CommandExists "mypy") {
+        $v = & mypy --version 2>&1 | Select-Object -First 1
+        Write-Status "OK" "mypy: $v"
+    } else {
+        Write-Status "FAIL" "mypy: 찾을 수 없음"
+    }
+    if (Test-CommandExists "black") {
+        $v = & black --version 2>&1 | Select-Object -First 1
+        Write-Status "OK" "black: $v"
+    } else {
+        Write-Status "FAIL" "black: 찾을 수 없음"
     }
 }
 

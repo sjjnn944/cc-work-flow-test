@@ -5,6 +5,8 @@
 |------|----------|------|----------|
 | JDK | 17 | Java 런타임/컴파일러 | `java -version` |
 | Gradle | 8.0 | 빌드 도구 (wrapper 사용) | `./gradlew --version` |
+| SpotBugs | latest | 정적 분석 (Gradle 플러그인) | `./gradlew spotbugsMain` |
+| OWASP Dependency-Check | latest | 의존성 보안 취약점 분석 (Gradle 플러그인) | `./gradlew dependencyCheckAnalyze` |
 
 ## 선택 도구
 | 도구 | 용도 | 설치 조건 |

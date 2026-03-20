@@ -69,6 +69,52 @@ else
     fi
 fi
 
+# ═══════════════════════════════════════
+# 정적 분석 도구 설치
+# ═══════════════════════════════════════
+
+# --- ruff ---
+write_status "CHECK" "ruff 확인 중..."
+if command_exists ruff; then
+    write_status "SKIP" "ruff $(ruff --version 2>&1 | head -1) — 이미 설치됨"
+else
+    if [[ "$CHECK_ONLY" == "false" ]]; then
+        write_status "INSTALL" "ruff 설치 중 (pip3)..."
+        pip3 install --user ruff
+        write_status "OK" "ruff 설치 완료"
+    else
+        write_status "INSTALL" "ruff 설치 필요"
+    fi
+fi
+
+# --- mypy ---
+write_status "CHECK" "mypy 확인 중..."
+if command_exists mypy; then
+    write_status "SKIP" "mypy $(mypy --version 2>&1 | head -1) — 이미 설치됨"
+else
+    if [[ "$CHECK_ONLY" == "false" ]]; then
+        write_status "INSTALL" "mypy 설치 중 (pip3)..."
+        pip3 install --user mypy
+        write_status "OK" "mypy 설치 완료"
+    else
+        write_status "INSTALL" "mypy 설치 필요"
+    fi
+fi
+
+# --- Black ---
+write_status "CHECK" "Black 확인 중..."
+if command_exists black; then
+    write_status "SKIP" "Black $(black --version 2>&1 | head -1) — 이미 설치됨"
+else
+    if [[ "$CHECK_ONLY" == "false" ]]; then
+        write_status "INSTALL" "Black 설치 중 (pip3)..."
+        pip3 install --user black
+        write_status "OK" "Black 설치 완료"
+    else
+        write_status "INSTALL" "Black 설치 필요"
+    fi
+fi
+
 # --- 검증 요약 ---
 echo ""
 echo "=== 검증 요약 ==="
@@ -91,4 +137,23 @@ else
 fi
 
 command_exists virtualenv && write_status "OK" "virtualenv: $(virtualenv --version)"
+
+if command_exists ruff; then
+    write_status "OK" "ruff:       $(ruff --version)"
+else
+    write_status "FAIL" "ruff: 찾을 수 없음"
+fi
+
+if command_exists mypy; then
+    write_status "OK" "mypy:       $(mypy --version)"
+else
+    write_status "FAIL" "mypy: 찾을 수 없음"
+fi
+
+if command_exists black; then
+    write_status "OK" "black:      $(black --version)"
+else
+    write_status "FAIL" "black: 찾을 수 없음"
+fi
+
 echo ""

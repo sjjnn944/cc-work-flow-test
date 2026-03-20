@@ -106,6 +106,20 @@ elif ! $CHECK_ONLY; then
     write_status "OK" "clang-format / clang-tidy 설치 완료"
 fi
 
+# --- cppcheck ---
+write_status "CHECK" "cppcheck 확인 중..."
+if command_exists cppcheck; then
+    write_status "SKIP" "cppcheck $(cppcheck --version 2>&1 | grep -oP '\d+\.\d+[\.\d]*') — 이미 설치됨"
+elif ! $CHECK_ONLY; then
+    PKG_MGR=$(detect_pkg_manager)
+    case "$PKG_MGR" in
+        apt)    pkg_install "cppcheck" cppcheck ;;
+        dnf)    pkg_install "cppcheck" cppcheck ;;
+        pacman) pkg_install "cppcheck" cppcheck ;;
+    esac
+    write_status "OK" "cppcheck 설치 완료"
+fi
+
 # --- 최종 검증 ---
 echo ""
 write_status "CHECK" "=== 설치 검증 ==="

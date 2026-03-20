@@ -73,6 +73,29 @@ else
     fi
 fi
 
+# --- clang-tidy ---
+write_status "CHECK" "clang-tidy 확인 중..."
+if command_exists clang-tidy; then
+    write_status "SKIP" "clang-tidy 이미 설치됨"
+elif ! $CHECK_ONLY; then
+    brew_install "llvm" "LLVM (clang-tidy)"
+    # llvm은 keg-only이므로 PATH에 추가 필요
+    LLVM_PREFIX="$(brew --prefix llvm 2>/dev/null)"
+    if [ -n "$LLVM_PREFIX" ] && [ -d "$LLVM_PREFIX/bin" ]; then
+        add_to_path "$LLVM_PREFIX/bin"
+    fi
+    write_status "OK" "clang-tidy 설치 완료"
+fi
+
+# --- cppcheck ---
+write_status "CHECK" "cppcheck 확인 중..."
+if command_exists cppcheck; then
+    write_status "SKIP" "cppcheck $(cppcheck --version 2>&1 | grep -oE '[0-9]+\.[0-9]+[\.0-9]*' | head -1) 이미 설치됨"
+elif ! $CHECK_ONLY; then
+    brew_install "cppcheck" "cppcheck"
+    write_status "OK" "cppcheck 설치 완료"
+fi
+
 # --- 검증 요약 ---
 echo ""
 echo "=== 검증 요약 ==="
@@ -81,4 +104,6 @@ command_exists cmake      && write_status "OK" "cmake:        $(cmake --version 
 command_exists ninja      && write_status "OK" "ninja:        $(ninja --version)"
 [[ -f "$VCPKG_DIR/vcpkg" ]] && write_status "OK" "vcpkg:        $VCPKG_DIR/vcpkg"
 command_exists clang-format && write_status "OK" "clang-format: $(clang-format --version)"
+command_exists clang-tidy   && write_status "OK" "clang-tidy:   $(clang-tidy --version 2>&1 | head -1)"
+command_exists cppcheck     && write_status "OK" "cppcheck:     $(cppcheck --version 2>&1)"
 echo ""

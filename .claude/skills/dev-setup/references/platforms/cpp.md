@@ -7,6 +7,8 @@
 | Ninja | 1.10 | 빌드 백엔드 | `ninja --version` |
 | vcpkg | latest | 패키지 매니저 | `vcpkg version` |
 | GCC/Clang/MSVC | GCC 11+ / Clang 14+ / MSVC 17+ | C++ 컴파일러 | `g++ --version` / `clang++ --version` / `cl` |
+| clang-tidy | latest | 정적 분석 | `clang-tidy --version` |
+| cppcheck | latest | 정적 분석 | `cppcheck --version` |
 
 ## 선택 도구
 | 도구 | 용도 | 설치 조건 |
@@ -14,7 +16,6 @@
 | GTest | 단위 테스트 | 테스트 빌드 시 |
 | Boost | 범용 라이브러리 | 설계서 의존성에 포함 시 |
 | Doxygen | API 문서 생성 | 문서화 필요 시 |
-| clang-tidy | 정적 분석 | CI 환경 |
 | clang-format | 코드 포맷팅 | 개발 환경 |
 
 ## 패키지 매니저

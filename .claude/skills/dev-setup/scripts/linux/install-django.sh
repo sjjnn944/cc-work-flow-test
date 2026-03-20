@@ -93,6 +93,37 @@ else
     fi
 fi
 
+# ═══════════════════════════════════════
+# 정적 분석 도구 설치
+# ═══════════════════════════════════════
+
+# --- ruff ---
+write_status "CHECK" "ruff 확인 중..."
+if command_exists ruff; then
+    write_status "SKIP" "ruff $(ruff --version 2>&1 | head -1) — 이미 설치됨"
+elif ! $CHECK_ONLY; then
+    pip3 install ruff 2>/dev/null || python3 -m pip install ruff
+    write_status "OK" "ruff 설치 완료"
+fi
+
+# --- mypy ---
+write_status "CHECK" "mypy 확인 중..."
+if command_exists mypy; then
+    write_status "SKIP" "mypy $(mypy --version 2>&1 | head -1) — 이미 설치됨"
+elif ! $CHECK_ONLY; then
+    pip3 install mypy 2>/dev/null || python3 -m pip install mypy
+    write_status "OK" "mypy 설치 완료"
+fi
+
+# --- Black ---
+write_status "CHECK" "Black 확인 중..."
+if command_exists black; then
+    write_status "SKIP" "Black $(black --version 2>&1 | head -1) — 이미 설치됨"
+elif ! $CHECK_ONLY; then
+    pip3 install black 2>/dev/null || python3 -m pip install black
+    write_status "OK" "Black 설치 완료"
+fi
+
 # --- 최종 검증 ---
 echo ""
 write_status "CHECK" "=== 설치 검증 ==="
@@ -107,3 +138,6 @@ else
     write_status "FAIL" "pip 없음"
 fi
 command_exists poetry && write_status "OK" "poetry      $(poetry --version 2>&1)" || write_status "FAIL" "poetry 없음"
+command_exists ruff   && write_status "OK" "ruff        $(ruff --version 2>&1)" || write_status "FAIL" "ruff 없음"
+command_exists mypy   && write_status "OK" "mypy        $(mypy --version 2>&1)" || write_status "FAIL" "mypy 없음"
+command_exists black  && write_status "OK" "black       $(black --version 2>&1)" || write_status "FAIL" "black 없음"
