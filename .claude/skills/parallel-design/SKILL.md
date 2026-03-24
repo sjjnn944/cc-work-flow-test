@@ -403,6 +403,27 @@ detailed-design-guide.md의 모든 필수 섹션을 포함하여 implementation.
 
 조건부 섹션: 상태 관리(상태 전이가 있는 경우), 스레드 모델(멀티스레딩 있는 경우)
 
+## 클래스 분리 설계 (필수 준수)
+
+모듈 내부를 기능 단위로 클래스/컴포넌트를 분리 설계하라.
+detailed-design-guide.md 2.6절의 **분해 기준 체크리스트**를 반드시 적용할 것.
+
+**필수 산출물** (implementation.md Section 2.6에 반드시 포함):
+1. Mermaid classDiagram — 2개 이상 클래스 간 관계를 표현
+2. 클래스별 책임 + FR 매핑 테이블 — `| 클래스 | 책임 | FR 매핑 |` 형식
+3. 클래스 간 소유/의존 관계 명시 — 합성(composition), 의존(dependency) 등 관계 유형 표기
+
+**분해 원칙:**
+- 단일 책임 원칙(SRP): 하나의 클래스는 하나의 변경 사유만 가짐
+- FR 그룹핑: 동일 도메인 개념을 다루는 FR들을 하나의 클래스에 매핑
+- 변경 사유 분리: 서로 다른 이유로 변경되는 로직은 별도 클래스
+- I/O vs Logic 분리: 외부 통신/파일 접근과 비즈니스 로직은 별도 클래스
+- FR 5개 이상 모듈은 최소 2개 이상의 내부 클래스를 설계할 것
+
+**플랫폼별 패턴 준수:**
+- C++ 모듈: `doc/base/detailed-designs/cpp.md` → 추상 클래스 + Factory 패턴
+- Spring Boot 모듈: `doc/base/detailed-designs/springboot.md` → 4-Layer 분해
+
 ## 플레이스홀더 처리 (필수 준수)
 
 interface.md에 `/* 상세 설계 시 확정 */`, `(미정)`, `TBD` 등의 플레이스홀더가 남아 있으면
@@ -473,6 +494,33 @@ for step_num, modules in result_steps:
     else:
       verify {doc_path}/implementation.md was created
     if missing: report failure, add to failed list
+
+  # 클래스 분해 품질 검증
+  for each task in tasks:
+    impl_path = task.output_path  # implementation.md 또는 implementation/{domain}.md
+    if impl_path exists:
+      # 1. classDiagram 존재 여부
+      has_classdiagram = Grep("classDiagram", impl_path)
+      if not has_classdiagram:
+        report "WARNING: {task.id} — classDiagram 누락 (Section 2.6 필수)"
+
+      # 2. 클래스 책임 테이블 존재
+      has_responsibility_table = Grep("\\| 클래스 .* \\| 책임", impl_path)
+      if not has_responsibility_table:
+        report "WARNING: {task.id} — 클래스 책임 테이블 누락 (Section 2.6 필수)"
+
+      # 3. FR 매핑 완전성 — 책임 테이블의 FR 매핑이 requirement.md의 모든 FR을 커버하는지
+      table_frs = extract FR IDs from 클래스 책임 테이블 "FR 매핑" 컬럼
+      req_frs = extract FR IDs from requirement.md
+      missing_frs = req_frs - table_frs
+      if missing_frs:
+        report "WARNING: {task.id} — 클래스 책임 테이블에서 FR 미매핑: {missing_frs}"
+
+      # 4. 최소 클래스 수 — FR 5개 이상 모듈에서 클래스가 1개만 정의된 경우 경고
+      fr_count = len(req_frs)
+      class_count = count "class " declarations in classDiagram block
+      if fr_count >= 5 and class_count <= 1:
+        report "WARNING: {task.id} — FR {fr_count}개이나 클래스 {class_count}개 (최소 2개 권장)"
 
   # 분할 모듈 추가 검증
   for each module in modules:
@@ -649,6 +697,10 @@ typedef struct _DLP_IPC_HEADER { ... }  # ← 단일 원천 원칙 위반
 - [ ] 각 implementation.md에 detailed-design-guide.md 필수 섹션이 모두 포함되었는가? (파생 요구사항, 아키텍처 개요, 추적성 테이블, 컴포넌트 설계, 핵심 시퀀스, 에러 처리 전략, 데이터 구조, 의존 상세)
 - [ ] 각 implementation.md의 핵심 시퀀스가 정상 경로와 오류 경로를 모두 포함하는가?
 - [ ] 소비자 모듈의 implementation.md가 참조하는 주체 모듈 인터페이스의 함수 시그니처/메시지 코드를 빠짐없이 사용하고 있는가?
+- [ ] 각 implementation.md Section 2.6에 classDiagram이 포함되었는가?
+- [ ] 각 implementation.md에 클래스별 책임 + FR 매핑 테이블이 포함되었는가?
+- [ ] 클래스 책임 테이블의 FR 매핑이 requirement.md의 모든 FR을 커버하는가?
+- [ ] FR 5개 이상 모듈에서 최소 2개 이상의 클래스가 설계되었는가?
 - [ ] FR >= split-threshold인 모듈이 분할 대상으로 식별되었는가?
 - [ ] 분할된 서브태스크의 FR 합집합 == requirement.md 전체 FR?
 - [ ] 분할된 서브태스크 간 FR 중복이 없는가?
