@@ -46,6 +46,8 @@ description: 구현 완료된 소스 코드 기반으로 기존 test.md의 TC를
 2. `src/` 디렉토리 존재 확인 — 없으면 "소스 코드가 없습니다. 구현 완료 후 실행하세요." 출력 후 중단
 3. `.temp/` 디렉토리 확인 — 없으면 `mkdir -p .temp`
 4. `.temp/step-*-test-review-batch.md` 기존 파일이 있으면 자동으로 덮어쓴다 (별도 확인 없이 진행)
+5. `.temp/test-review-results/` 디렉토리 확인 — 없으면 mkdir -p
+6. `.temp/test-review-results/*.result.md` 기존 파일이 있으면 자동 덮어쓴다
 
 ## Step 1: 모듈 탐색 (Discovery)
 
@@ -56,28 +58,18 @@ description: 구현 완료된 소스 코드 기반으로 기존 test.md의 TC를
 test_files = Glob("doc/develop/**/test.md")  # 또는 서브시스템 한정
 ```
 
-**모듈별 소스 경로 매핑 규칙:**
-```
-doc/develop/agt/{category}/{module}/test.md
-  → src/agt/{category}/{module}/
+**모듈별 소스 경로 매핑:**
+`doc/architecture/module-mapping.md`를 Read하여 각 모듈의 doc 경로 → src 경로 및 test 경로를 추출한다.
+매핑 테이블의 `doc 경로`, `src 경로`, `test 경로` 컬럼을 사용한다.
 
-doc/develop/agt/{module}/test.md  (flat 구조)
-  → src/agt/{module}/
-
-doc/develop/svr/{module}/test.md
-  → src/svr/{module}/
-```
+> **주의:** doc 경로와 src 경로가 단순 치환 관계가 아닌 플랫폼이 있다 (예: Spring Boot는 `doc/develop/svr/auth/` → `src/svr/svr-auth/`). 하드코딩 규칙 대신 반드시 module-mapping.md를 참조할 것.
 
 **Skip 판정:**
 - test.md가 없으면 → skip ("test.md 미존재, 먼저 /parallel-test 실행")
-- 대응하는 src/ 디렉토리가 없으면 → skip ("소스 코드 미존재")
-- src/ 디렉토리에 소스 파일(*.cpp, *.h, *.java, *.kt)이 없으면 → skip
+- test.md가 있으면 → 대상에 포함 (소스 존재 여부는 사전 검사하지 않음)
 
 **소스 파일 수집:**
-```
-AGT 모듈: Glob("src/agt/{...}/{module}/**/*.cpp") + Glob("src/agt/{...}/{module}/**/*.h")
-SVR 모듈: Glob("src/svr/{module}/**/*.java") + Glob("src/svr/{module}/**/*.kt")
-```
+워커가 src 경로를 읽어서 분기 분석에 사용. 소스가 없으면 워커가 빌드 실패로 리포트.
 
 ## Step 2: 배치 계획
 
@@ -89,7 +81,7 @@ SVR 모듈: Glob("src/svr/{module}/**/*.java") + Glob("src/svr/{module}/**/*.kt"
 AGT: {N}개 모듈 (소스 파일 {X}개)
 SVR: {M}개 모듈 (소스 파일 {Y}개)
 
-건너뛴 모듈: {K}개 (소스 코드 미존재)
+건너뛴 모듈: {K}개 (test.md 미존재)
 ```
 
 ## Step 3: .temp/ 파일 생성
@@ -145,7 +137,7 @@ SVR: {M}개 모듈 (소스 파일 {Y}개)
 Step 01: {N}개 모듈 (AGT, 병렬 실행)
 Step 02: {M}개 모듈 (SVR, 병렬 실행)
 
-건너뛴 모듈: {K}개 (소스 코드 미존재)
+건너뛴 모듈: {K}개 (test.md 미존재)
 
 .temp/ 생성 파일:
   - .temp/step-01-test-review-batch.md
@@ -154,7 +146,7 @@ Step 02: {M}개 모듈 (SVR, 병렬 실행)
 
 **조건부 승인:**
 - 건너뛴 모듈이 **0개** → 요약 출력 후 자동으로 Step 5 진행
-- 건너뛴 모듈이 **1개 이상** → skip 목록 + 사유를 표시하고 AskUserQuestion으로 진행 여부 확인
+- 건너뛴 모듈이 **1개 이상** (test.md 미존재) → skip 목록을 표시하고 자동으로 Step 5 진행 (test.md 부재는 사전 단계 누락이므로 별도 승인 불필요)
 
 `--dry-run` 인 경우 종료.
 
@@ -230,6 +222,33 @@ Step 02: {M}개 모듈 (SVR, 병렬 실행)
    - Mock 금지 기본 원칙 준수 (실제 환경 테스트)
 4. **테스트 코드 검증**: 작성 후 빌드 가능 여부 확인 (컴파일 에러 없는지)
 
+### E. 결과 파일 작성
+
+작업 완료 후 `.temp/test-review-results/{MODULE_ID}.result.md`를 생성한다.
+
+```yaml
+---
+module: {MODULE_ID}
+status: SUCCESS | PARTIAL | FAILED
+tc_total: {N}
+tc_test: {N}
+tc_review: {N}
+tc_added: {N}
+impl_files: {N}  # --impl 시, 생성한 테스트 파일 수
+timestamp: {ISO 8601}
+---
+```
+
+- **SUCCESS**: 분기 분석 + TC 마킹 + 누락 TC 추가 완료
+- **PARTIAL**: 일부 함수의 소스 코드를 읽을 수 없거나, 빌드 실패
+- **FAILED**: src 경로에 소스 없음 또는 치명적 오류
+
+YAML 아래에 마크다운으로:
+- 분기 분석 요약 (함수별 분기 수)
+- 추가된 TC 목록
+- REVIEW 분류 TC 목록 + 사유
+- 실패 시 실패 사유
+
 ## 변경 범위 제한
 
 - test.md 수정: 검증 방법 컬럼 추가 + 누락 TC 추가 + 리뷰 요약 섹션
@@ -249,6 +268,14 @@ Step 02: {M}개 모듈 (SVR, 병렬 실행)
 /parallel-test와 동일 (배치 순차, 배치 내 병렬, 1건 이상 실패 시 실패 목록 + 사유를 표시하고 사용자 확인).
 
 ### 5.3 결과 보고
+
+1. `.temp/test-review-results/{MODULE_ID}.result.md` 파싱하여 집계
+   - result 파일 미존재 → NO_REPORT, 실패 목록에 추가
+2. `.temp/test-review-results/step-{NN}-summary.md` 생성 (배치별)
+   - 테이블: module | status | tc_total | tc_test | tc_review | tc_added | impl_files
+3. `.temp/test-review-results/execution-report.md` 생성 (최종)
+   - 실행 개요, 배치별 결과, 전체 집계, 실패 모듈 상세
+4. 콘솔 요약 출력 (기존 형식 유지)
 
 ```
 === parallel-test-review 완료 ===
@@ -276,7 +303,6 @@ Step 02 (SVR): {success}/{total} 완료
 <Escalation_And_Stop_Conditions>
 - **소스 코드 미존재** (`src/` 디렉토리 없음): 즉시 중단, 구현 완료 후 재실행 안내
 - **test.md 미존재**: 해당 모듈만 skip + "/parallel-test로 먼저 생성" 안내
-- **대응 소스 파일 없음**: 해당 모듈만 skip + 경고
 - **배치 내 1건 이상 실패**: 실패 목록 + 사유를 표시하고 다음 배치 진행 여부 사용자 확인
 </Escalation_And_Stop_Conditions>
 
@@ -347,10 +373,10 @@ test.md 없이 실행:
 </Examples>
 
 <Tool_Usage>
-- **Glob 도구**: `doc/develop/**/test.md` 탐색, `src/**/*.cpp`, `src/**/*.java` 소스 파일 수집
+- **Glob 도구**: `doc/develop/**/test.md` 탐색
 - **Read 도구**: interface.md (공개 함수 목록), 소스 코드 (분기 분석), 기존 test.md
 - **Bash 도구**: `.temp/` 디렉토리 생성
-- **Write 도구**: `.temp/step-{NN}-test-review-batch.md` 생성
+- **Write 도구**: `.temp/step-{NN}-test-review-batch.md` 생성, `.temp/test-review-results/*.result.md` 및 요약 파일 생성
 - **Edit 도구**: 워커가 기존 test.md에 검증 방법 컬럼 추가 시
 - **AskUserQuestion**: skip 발생 시 진행 확인, 실패 발생 시 계속 진행 여부
 - **Skill 도구**: `/team N:deep-executor` 호출로 배치 내 병렬 실행
@@ -367,6 +393,9 @@ test.md 없이 실행:
 - [ ] 누락 분기에 대한 TC가 기존 번호 체계를 이어서 추가되었는가?
 - [ ] "코드 리뷰 검증 대상" 요약 섹션이 test.md에 추가되었는가?
 - [ ] 결과 보고에 TEST/REVIEW/신규 추가 수가 집계되었는가?
+- [ ] `.temp/test-review-results/` 디렉토리가 생성되었는가?
+- [ ] 각 워커가 `{MODULE_ID}.result.md`를 작성했는가?
+- [ ] `execution-report.md`에 전체 집계가 정확한가?
 - [ ] `--impl` 시: 신규 TC 중 TEST 분류된 것에 대한 테스트 코드가 생성되었는가?
 - [ ] `--impl` 시: 테스트 코드 위치가 module-mapping.md의 test 경로와 일치하는가?
 - [ ] `--impl` 시: 생성된 테스트 코드가 Mock 금지 원칙을 준수하는가?

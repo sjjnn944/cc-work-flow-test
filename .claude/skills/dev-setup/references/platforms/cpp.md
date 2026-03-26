@@ -10,10 +10,14 @@
 | clang-tidy | latest | 정적 분석 | `clang-tidy --version` |
 | cppcheck | latest | 정적 분석 | `cppcheck --version` |
 
+## 테스트 프레임워크
+| 도구 | 최소 버전 | 용도 | 설치 조건 | 설치 방법 |
+|------|----------|------|----------|----------|
+| GTest | latest | 단위 테스트 | `test/` 디렉토리 존재 시 (필수) | vcpkg (`gtest`) |
+
 ## 선택 도구
 | 도구 | 용도 | 설치 조건 |
 |------|------|----------|
-| GTest | 단위 테스트 | 테스트 빌드 시 |
 | Boost | 범용 라이브러리 | 설계서 의존성에 포함 시 |
 | Doxygen | API 문서 생성 | 문서화 필요 시 |
 | clang-format | 코드 포맷팅 | 개발 환경 |

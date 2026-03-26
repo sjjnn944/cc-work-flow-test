@@ -37,8 +37,9 @@ doc/develop/ 내 모듈들을 탐색하고, interface.md의 소유권/참조 관
 | subsystem | (전체) | `agt` 또는 `svr` — 특정 서브시스템만 대상 |
 | --force | false | src/ 내 소스 파일이 이미 존재해도 재구현 |
 | --dry-run | false | .temp/ 파일만 생성하고 실행하지 않음 |
-| --workers N | (배치 내 모듈 수) | 배치당 병렬 워커 수 제한 |
+| --workers N | (배치 내 모듈 수, 최대 8) | 배치당 병렬 워커 수 제한 (최대 8개 — rate limit 방지) |
 | --skip-verify | false | Phase A 검증(빌드 + 정적 분석 + 단위 테스트) 생략 |
+| --max-retries N | 3 | Phase 2 빌드/테스트 실패 시 자동 수정 재시도 최대 횟수 |
 </Arguments>
 
 <Steps>
@@ -98,7 +99,7 @@ mapping 예시:
 
 각 대상 모듈에 다음 파일이 모두 존재하는지 확인:
 - `interface.md` — 없으면 경고 출력 후 해당 모듈 skip
-- `test.md` — 없으면 경고 출력 (skip 없이, --skip-verify 없어도 단위 테스트만 생략)
+- `test.md` — 없으면 경고 출력 (해당 모듈 Phase 2-C SKIP. 테스트 코드 작성 의무 없음)
 
 ## Step 2: 의존성 분석 (Dependency Analysis)
 
@@ -131,6 +132,39 @@ mapping 예시:
      if refs:
        dependencies[module.id] = [resolve_module_id(ref) for ref in refs]
    ```
+
+**빌드 파일 의존성 보조 감지:**
+
+interface.md 기반 의존성 분석 이후, 빌드 파일에서 추가 의존성을 추출하여 그래프에 병합한다.
+
+```
+for each module in target_modules:
+  if module.platform == "springboot":
+    build_file = "{src_path}/build.gradle.kts"
+    if exists(build_file):
+      content = read(build_file)
+      # implementation(project(":모듈명")) 패턴 파싱
+      build_deps = regex_findall(r'implementation\(project\(":(\w+)"\)\)', content)
+      for dep in build_deps:
+        dep_id = resolve_module_id(dep)
+        if dep_id and dep_id not in dependencies[module.id]:
+          WARN: "{module.id}: 빌드 파일에 의존성 {dep_id} 발견 (interface.md에 없음)"
+          dependencies[module.id].append(dep_id)
+
+  elif module.platform == "cpp":
+    cmake_file = "{src_path}/CMakeLists.txt"
+    if exists(cmake_file):
+      content = read(cmake_file)
+      # target_link_libraries(... 모듈명) 패턴 파싱
+      build_deps = regex_findall(r'target_link_libraries\([^)]*\b(\w+)\b', content)
+      for dep in build_deps:
+        dep_id = resolve_module_id(dep)
+        if dep_id and dep_id not in dependencies[module.id]:
+          WARN: "{module.id}: 빌드 파일에 의존성 {dep_id} 발견 (interface.md에 없음)"
+          dependencies[module.id].append(dep_id)
+```
+
+interface.md에 없지만 빌드 파일에 있는 의존성은 경고를 출력하고 의존성 그래프에 추가한다. 이를 통해 실제 빌드 의존 모듈이 같은 Step에 배치되는 것을 방지한다.
 
 **교차 서브시스템 참조 처리:**
 
@@ -388,7 +422,7 @@ common 상수: {M}개 (src/common/include/dlp_service_constants.h)
 4. 코딩 컨벤션 (존재 시 필수 읽기): `doc/base/coding-convention/README.md`
 5. 설계서: `{doc_path}/implementation.md`
 6. 인터페이스: `{doc_path}/interface.md`
-7. 테스트 케이스: `{doc_path}/test.md`  (없으면 생략)
+7. 테스트 케이스: `{doc_path}/test.md`  (필수 — 단위 테스트 코드 작성 기준. 없으면 Phase 2-C SKIP)
 {소비자인 경우 추가:}
 8. 참조 인터페이스 (주체 모듈): `{owner_interface_path}`
    → 주체 모듈 공유 헤더 경로: `{owner_src_path}/include/`
@@ -415,20 +449,112 @@ implementation-guide.md의 모든 원칙을 준수하여 소스 코드를 작성
 src 경로: `{src_path}/`
 플랫폼: {cpp | springboot}
 
-### Phase 2: Phase A 검증 (--skip-verify 미지정 시)
+## 파일 소유권 원칙
 
-구현 완료 후 verification-guide.md 섹션 1-4를 기준으로 검증 수행:
+이 워커는 자기 모듈의 src 경로(`{src_path}/`)에만 파일을 생성/수정한다. 다른 모듈의 소스 파일을 절대 수정하지 않는다.
 
-1. **빌드 검증**: `tools/build.ps1 -Module {MODULE_ID}` 실행 → 컴파일 에러 0건 확인
-   - Linux/macOS: `tools/build.sh --module {MODULE_ID}`
-   - tools/build.ps1이 없으면 플랫폼별 직접 빌드 (fallback)
-2. **정적 분석**: 도구 실행 + 아래 패턴을 코드 리뷰로 추가 확인
-   - 반환값을 변수에 저장했으나 if/switch로 검증하지 않는 코드
-   - 에러 경로(if FAILED, catch 등)에서 로그 출력 없이 반환하는 코드
-   - 핸들 생성 후 조기 return/break 경로에서 CloseHandle 누락
-   - 잠금 해제 후 잠금 내에서 획득한 포인터를 역참조하는 코드
-3. **단위 테스트**: test.md의 테스트 케이스 기반 단위 테스트 실행 (test.md가 있는 경우)
+## 인터페이스 갭 보고 원칙
+
+의존 모듈의 인터페이스가 부족하여 구현이 불가능한 경우:
+
+1. 의존 모듈의 소스를 수정하지 **않는다**
+2. 빌드가 실패하더라도 **첫 번째 갭에서 멈추지 않는다** — 소스 코드 전체를 작성 완료한 후, 모든 인터페이스 갭을 식별한다
+3. result.md에 `## 인터페이스 갭` 절을 추가하여 다음 정보를 **갭별로** 기록한다:
+
+| # | 의존 모듈 | 필요 인터페이스 | 필요 기능 설명 | 호출 위치 (파일:라인) | 빌드 영향 |
+|---|----------|---------------|--------------|---------------------|----------|
+| 1 | {DEP_MODULE} | {메서드/함수 시그니처 (파라미터 타입, 반환 타입 포함)} | {왜 이 인터페이스가 필요한지 — 비즈니스 로직 관점} | {파일:라인} | {컴파일 에러 / 링크 에러 / 런타임 에러} |
+
+4. 각 갭에 대해:
+   - **필요 인터페이스**: 메서드/함수 시그니처 (파라미터 타입, 반환 타입 포함)
+   - **필요 기능 설명**: 왜 이 인터페이스가 필요한지 (비즈니스 로직 관점)
+   - **호출 위치**: 이 모듈의 어떤 파일, 어떤 라인에서 호출하는지
+   - **빌드 영향**: 이 갭으로 인해 발생하는 에러 유형 (컴파일/링크/런타임)
+5. 빌드 결과는 `build: FAIL (INTERFACE_GAP)` 으로 기록 — 일반 FAIL과 구분
+
+### Phase 2-A: 빌드 검증 재시도 루프 (--skip-verify 미지정 시)
+
+구현 완료 후 verification-guide.md 섹션 1-4를 기준으로 검증 수행한다.
+
+```
+build_attempt = 1
+
+while build_attempt <= max_retries + 1:
+  1. `python tools/build.py --module {MODULE_ID}` 실행
+     - 빌드 도구 미설치/build.py 미존재 → FAIL (재시도 불가, 즉시 탈출)
+
+  2. 성공 → build: PASS, break
+
+  3. 실패 (컴파일 에러):
+     if build_attempt > max_retries → build: FAIL, break
+     if 이전 시도와 동일 에러 → build: FAIL, break (동일 에러 반복 방지)
+
+     a. 에러 메시지에서 파일명, 라인, 에러 코드 추출
+     b. 에러 유형별 수정:
+        - include 경로 오류 → 경로 수정
+        - 미선언 심볼 → 선언 추가 / 타입 수정
+        - 링크 에러 → 누락 함수 구현
+        - 기타 → implementation.md 참조하여 수정
+     c. 수정 내용 기록
+     build_attempt += 1
+```
+
+**재시도 불가 조건 (즉시 FAIL):**
+- 빌드 도구 미설치 / build.py 미존재
+- 동일 에러 2회 연속 반복 (수정 무효)
+
+### Phase 2-B: 정적 분석
+
+도구 실행 + 아래 패턴을 코드 리뷰로 추가 확인 (재시도 대상 아님):
+- 반환값을 변수에 저장했으나 if/switch로 검증하지 않는 코드
+- 에러 경로(if FAILED, catch 등)에서 로그 출력 없이 반환하는 코드
+- 핸들 생성 후 조기 return/break 경로에서 CloseHandle 누락
+- 잠금 해제 후 잠금 내에서 획득한 포인터를 역참조하는 코드
+
+### Phase 2-C: 단위 테스트 작성 및 실행 재시도 루프
+
+```
+test_attempt = 1
+
+while test_attempt <= max_retries + 1:
+  1. test.md 없으면 → test: SKIP (재시도 없음)
+
+  2. test.md의 TC를 구현하는 테스트 코드를 작성한다:
+     - test.md의 TC ID, 입력, 기대 결과를 기반으로 테스트 코드 파일 생성
+     - 테스트 코드 경로: module-mapping.md의 test_path 또는 test/ 하위
+     - 환경 제약으로 실행 불가한 TC는 코드는 작성하되, SKIP 마킹하고 사유를 기록
+       (예: // SKIP: VM 배포 필요 — fltmc load DlpMinifilter 환경에서 실행)
+
+  3. 테스트 빌드 + 실행
+     - 실행 가능한 TC만 실행, 환경 제약 TC는 빌드 검증만
+
+  4. 전체 통과 → test: PASS, break
+     환경 제약으로 실행 불가 → test: SKIP (사유 + 실행 불가 TC 목록 기록)
+     실행 가능 TC 중 실패 → 아래 재시도 로직 적용
+
+  5. 실패 재시도:
+     if test_attempt > max_retries → test: FAIL, break
+     if 이전 시도와 동일 실패 TC → test: FAIL, break
+
+     a. 실패 TC의 에러 메시지/스택 추출
+     b. 구현 로직 오류 → 소스 수정 (implementation.md 참조)
+        테스트 환경 문제 → FAIL (재시도 불가, 즉시 탈출)
+     c. 코드 수정했으므로 빌드 재실행 → 빌드 실패 시 test: FAIL
+     d. 수정 내용 기록
+     test_attempt += 1
+```
+
+**재시도 불가 조건 (즉시 FAIL):**
+- 테스트 프레임워크 미설치
+- 동일 실패 TC 2회 연속 반복 (수정 무효)
+
 4. **커버리지 확인**: 핵심 경로 커버리지 기준 충족 여부 확인
+
+**빌드 검증 필수 원칙:**
+- 빌드 도구 실행이 실패하면 반드시 build: FAIL로 보고한다
+- 코드 리뷰, 문법 검토, 수동 검사 등으로 빌드 검증을 대체할 수 없다
+- "빌드 환경 미설치"는 FAIL 사유이며, PASS나 SKIP이 아니다
+- result.md의 build 필드는 실제 컴파일러/빌드 도구 실행 결과만 반영한다
 
 ## 프로토콜 참조 원칙 (필수 준수)
 
@@ -443,13 +569,19 @@ src 경로: `{src_path}/`
 (예: AGT.CORE → `.temp/impl-results/AGT.CORE.result.md`)
 `.temp/impl-results/` 디렉토리가 없으면 먼저 생성한다.
 
+**result.md 시작은 반드시 다음 YAML frontmatter로 시작한다 (누락 시 검증 실패):**
+
 파일 형식:
 ```markdown
 ---
 module: {MODULE_ID}
 status: SUCCESS | PARTIAL | FAILED
-build: PASS | FAIL
-test: {통과}/{전체} PASS | SKIP
+build: PASS | FAIL | FAIL (INTERFACE_GAP)
+build_attempts: {N}
+interface_gaps: {0 | N}
+interface_gap_targets: [{의존 모듈 ID 목록}]
+test: {통과}/{전체} PASS | SKIP | NOT_IMPL
+test_attempts: {N}
 static_analysis: {N} warnings
 timestamp: {ISO 8601}
 ---
@@ -462,6 +594,20 @@ timestamp: {ISO 8601}
 
 ## 정적 분석
 (경고 목록)
+
+## 재시도 이력 (재시도 발생 시만)
+
+### 빌드 재시도
+| 시도 | 에러 요약 | 수정 내용 | 결과 |
+|------|----------|----------|------|
+| 1 | {에러 1줄} | (첫 시도) | FAIL |
+| 2 | {에러 1줄} | {파일:라인 수정 요약} | PASS |
+
+### 테스트 재시도
+| 시도 | 실패 TC | 수정 내용 | 결과 |
+|------|--------|----------|------|
+| 1 | {TC명} | (첫 시도) | FAIL |
+| 2 | {TC명} | {파일:라인 수정 요약} | PASS |
 
 ## 실패 사유 (실패 시만)
 (구체적 실패 원인 + 관련 파일/라인)
@@ -479,7 +625,7 @@ timestamp: {ISO 8601}
 
 ```
 for step_num, modules in result_steps:
-  worker_count = min(len(modules), args.workers or len(modules), 20)
+  worker_count = min(len(modules), args.workers or len(modules), 8)  # 최대 8개 (rate limit 방지)
 
   # /team 호출
   # 각 모듈별 워커 프롬프트를 구성하여 /team {worker_count}:deep-executor 에 전달
@@ -496,11 +642,23 @@ for step_num, modules in result_steps:
       module.static_analysis = "UNKNOWN"
       add to failed list with reason "워커 결과 파일 미생성"
     else:
-      parse frontmatter → extract status, build, test, static_analysis
+      parse frontmatter → extract status, build, build_attempts, test, test_attempts, static_analysis
       module.status = parsed.status
       module.build = parsed.build
+      module.build_attempts = parsed.build_attempts or 1
       module.test = parsed.test
+      module.test_attempts = parsed.test_attempts or 1
       module.static_analysis = parsed.static_analysis
+      if module.test == "SKIP":
+        module.skip_reason = extract from "Phase 2-C" or "Unit Test" section of result.md
+        # 환경 제약 SKIP vs 미구현 SKIP 교차 검증
+        if test.md exists for this module:
+          if module.skip_reason is empty or contains "별도 작업":
+            module.test = "NOT_IMPL"  # 미구현으로 재분류
+            add to failed list with reason "test.md 존재하나 테스트 코드 미작성 (Phase 2-C 미수행)"
+      if module.build contains "리뷰" or "review":
+        module.build = "FAIL"
+        add to failed list with reason "빌드 검증이 코드 리뷰로 대체됨 — 실제 빌드 필요"
       if module.status in ["FAILED", "PARTIAL"]:
         add to failed list with reason from "## 실패 사유" section
 
@@ -510,6 +668,28 @@ for step_num, modules in result_steps:
       module.status = "NO_SRC"
       add to failed list with reason "src 파일 미생성"
 
+  # Post-step 통합 빌드 검증
+  # 각 워커의 개별 빌드가 완료된 후, Step 전체 모듈의 통합 빌드를 실행한다.
+  # 이를 통해 워커 재시도 중 파일 덮어쓰기로 인한 크로스모듈 불일치를 탐지한다.
+  integration_failures = []
+  for module in modules:
+    if module.status == "FAILED":
+      continue  # 이미 실패한 모듈은 통합 빌드 대상에서 제외
+    result = run "python tools/build.py --module {MODULE_ID}"
+    if result.failed:
+      integration_failures.append({
+        module: module.id,
+        error: result.error_message
+      })
+      # 에러 메시지에서 인터페이스 불일치 여부 확인
+      if "unresolved" in result.error or "undefined reference" in result.error:
+        module.integration_note = "크로스모듈 인터페이스 불일치 의심"
+
+  if integration_failures:
+    WARN: "Step {step_num} 통합 빌드 실패: {[f.module for f in integration_failures]}"
+    for f in integration_failures:
+      add to failed list with reason "통합 빌드 실패: {f.error} ({f.module.integration_note or ''})"
+
   # Step 요약 파일 생성
   Write ".temp/impl-results/step-{NN}-summary.md":
     ```markdown
@@ -518,9 +698,9 @@ for step_num, modules in result_steps:
     > 실행 시각: {timestamp}
     > 대상 모듈: {total}개
 
-    | 모듈 | 상태 | 빌드 | 테스트 | 정적분석 | 비고 |
-    |------|------|------|--------|---------|------|
-    | {MODULE_ID} | {status} | {build} | {test} | {static_analysis} | {failure_reason or ""} |
+    | 모듈 | 상태 | 빌드 | 시도 | 테스트 | 시도 | 정적분석 | 비고 |
+    |------|------|------|------|--------|------|---------|------|
+    | {MODULE_ID} | {status} | {build} | {build_attempts} | {test} | {test_attempts} | {static_analysis} | {failure_reason or ""} |
     ...
 
     성공: {success_count}/{total}, 실패: {failed_count}/{total}
@@ -557,11 +737,64 @@ for step_num, modules in result_steps:
 - 테스트: {test_pass}/{test_total} 통과
 - 정적 분석 경고: {warn_total}건
 
+## 재시도 통계
+- 빌드 재시도 발생: {N}/{total}개 모듈
+- 테스트 재시도 발생: {M}/{total}개 모듈
+- 재시도 후 성공: {K}개 모듈
+- 재시도 소진 실패: {module_list}
+
 ## 실패 모듈 상세
 
 | 모듈 | 상태 | 실패 사유 | 의존 영향 |
 |------|------|----------|-----------|
 | {MODULE_ID} | {status} | {failure_reason} | {이 모듈에 의존하는 모듈 목록} |
+
+## 인터페이스 갭 통합
+
+모든 워커의 result.md에서 `## 인터페이스 갭` 절과 frontmatter의 `interface_gaps`, `interface_gap_targets` 필드를 수집하여 통합 테이블을 생성한다.
+
+| 제공 모듈 | 부족 인터페이스 | 요청 모듈 | 기능 설명 | 호출 위치 | 빌드 영향 |
+|-----------|---------------|-----------|----------|----------|----------|
+| {DEP_MODULE} | {필요 인터페이스 시그니처} | {요청 MODULE_ID} | {필요 기능 설명} | {파일:라인} | {에러 유형} |
+
+### 조치 필요 사항
+
+갭이 존재하는 경우, 제공 모듈별로 필요한 조치를 요약한다:
+- {제공 모듈}: {부족 인터페이스 목록} 추가 필요
+- 추가 후 {요청 모듈} 재빌드로 갭 해소 확인
+
+> 수집 방법: 각 result.md에서 `build: FAIL (INTERFACE_GAP)` 인 모듈의 `## 인터페이스 갭` 테이블을
+> 파싱하여, 동일 제공 모듈의 갭을 하나의 그룹으로 병합한다.
+
+## 통합 빌드 검증 결과
+
+각 Step의 post-step 통합 빌드 결과를 집계한다.
+
+| Step | 통합 빌드 | 실패 모듈 | 실패 원인 |
+|------|----------|----------|----------|
+| Step {NN} | PASS / FAIL | {실패 모듈 목록 또는 "-"} | {크로스모듈 불일치 등} |
+
+## 테스트 SKIP 원인 통합
+
+### 환경 제약 SKIP (정당한 사유)
+
+각 워커의 result.md에서 test: SKIP 사유를 수집하여 공통 원인별로 그룹화한다.
+
+| SKIP 원인 | 해당 모듈 | TC 수 | 해소 조건 |
+|-----------|----------|-------|----------|
+| {reason_category} | {MODULE_ID, ...} | {total_tc_count} | {환경/조건 설명} |
+
+> 수집 방법: 각 result.md의 "Phase 2-C: 단위 테스트" 절에서 SKIP 사유를 추출하고,
+> 동일 사유를 가진 모듈을 하나의 행으로 병합한다.
+> TC 수는 test.md에 정의된 전체 TC 수를 기재한다 (실행 불가 TC 포함).
+
+### 미구현 (test.md 존재, 워커 미수행)
+
+Step 7.2에서 NOT_IMPL로 재분류된 모듈을 별도 표시한다.
+
+| 모듈 | TC 수 | 비고 |
+|------|-------|------|
+| {MODULE_ID} | {tc_count} | test.md 존재 — 재실행 필요 |
 
 ## full-verify 전달 사항
 (Step 8에서 추가 확인이 필요한 항목 — PARTIAL 모듈, 높은 경고 수 모듈 등)
@@ -592,6 +825,24 @@ Phase A 검증 요약:
 정적 분석 경고 주요 항목:
   - {MODULE_ID}: {경고 내용} ({건수}건)
 
+{테스트 SKIP이 있으면:}
+테스트 SKIP 원인 (환경 제약):
+  - VM 배포 필요: {MODULE_LIST} ({N}개 TC)
+  - 관리자 권한 필요: {MODULE_LIST} ({N}개 TC)
+  - 의존 모듈 미배포: {MODULE_LIST} ({N}개 TC)
+
+{인터페이스 갭이 있으면:}
+인터페이스 갭:
+  - {제공 모듈}: {부족 인터페이스 목록} (요청: {요청 모듈 목록})
+
+{통합 빌드 실패가 있으면:}
+통합 빌드 실패:
+  - Step {NN}: {실패 모듈 목록} (크로스모듈 인터페이스 불일치)
+
+{테스트 NOT_IMPL이 있으면:}
+테스트 미구현 (test.md 존재, 워커 미수행):
+  - {MODULE_LIST} — 재실행 필요
+
 상세 보고서: .temp/impl-results/execution-report.md
 ```
 
@@ -605,6 +856,7 @@ Phase A 검증 요약:
 - **빌드 환경 미준비**: 빌드 스크립트 실행 실패 시 워커가 보고 → 사용자에게 에스컬레이션
 - **step 내 1건 이상 실패**: 실패 목록 + 사유를 표시하고 다음 step 진행 여부 사용자 확인
 - **NO_REPORT (워커 결과 파일 미생성)**: 워커가 `.temp/impl-results/{MODULE_ID}.result.md`를 생성하지 않은 경우 — 해당 모듈을 FAILED(NO_REPORT)로 기록하고, step-summary에 "워커 결과 파일 미생성" 사유를 명시. src 파일 존재 여부를 추가 확인하여 실제 구현은 완료되었으나 보고만 누락된 경우(PARTIAL)와 구현 자체가 실패한 경우(FAILED)를 구분한다
+- **재시도 소진 (RETRY_EXHAUSTED)**: 최대 재시도 후에도 빌드/테스트 실패 — FAILED(RETRY_EXHAUSTED)로 기록. 재시도 이력(각 시도의 에러 + 수정 내용) 전체를 결과 파일에 포함하여 수동 진단 가능하게 한다
 - **사용자 "중단" 요청**: 현재 step 완료 후 중단 (진행 중인 워커는 완료까지 대기)
 </Escalation_And_Stop_Conditions>
 
@@ -738,4 +990,18 @@ Phase A 검증 없이 완료 보고:
 - [ ] 각 Step 완료 후 `.temp/impl-results/step-{NN}-summary.md`가 생성되었는가?
 - [ ] 모든 Step 완료 후 `.temp/impl-results/execution-report.md`가 생성되었는가?
 - [ ] NO_REPORT(워커 결과 파일 미생성) 상태가 올바르게 FAILED로 기록되었는가?
+- [ ] 워커 프롬프트에 빌드/테스트 재시도 루프와 최대 재시도 횟수가 포함되었는가?
+- [ ] 동일 에러 반복 시 즉시 탈출하는 가드가 포함되었는가?
+- [ ] Phase 2-C에서 test.md 기반 테스트 코드 작성 단계가 실행 전에 수행되는가?
+- [ ] Step 7.2에서 test.md 존재 + SKIP인 모듈이 NOT_IMPL로 재분류되는가?
+- [ ] execution-report에서 환경 제약 SKIP과 미구현 NOT_IMPL이 별도 테이블로 구분되는가?
+- [ ] Step 2에서 빌드 파일(build.gradle.kts, CMakeLists.txt) 의존성 보조 감지가 수행되는가?
+- [ ] 빌드 파일에만 존재하는 의존성이 경고 출력 + 그래프 병합되는가?
+- [ ] 워커 프롬프트에 파일 소유권 원칙(자기 모듈 src 경로만 수정)이 포함되었는가?
+- [ ] 워커 프롬프트에 인터페이스 갭 보고 원칙(갭 테이블 + FAIL(INTERFACE_GAP))이 포함되었는가?
+- [ ] result.md frontmatter에 `interface_gaps`, `interface_gap_targets` 필드가 포함되었는가?
+- [ ] 각 Step 완료 후 post-step 통합 빌드가 실행되는가?
+- [ ] 통합 빌드 실패 시 크로스모듈 인터페이스 불일치 여부가 확인되는가?
+- [ ] execution-report에 "인터페이스 갭 통합" 절이 생성되는가?
+- [ ] execution-report에 "통합 빌드 검증 결과" 절이 생성되는가?
 </Final_Checklist>

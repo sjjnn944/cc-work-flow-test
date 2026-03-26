@@ -51,6 +51,11 @@ class CppInstaller(PlatformInstaller):
                 package_specs={"winget": "Cppcheck.Cppcheck", "choco": "cppcheck",
                                "apt": "cppcheck", "dnf": "cppcheck", "brew": "cppcheck"},
             ),
+            ToolSpec(
+                name="GTest (vcpkg)",
+                cmd="",
+                install_func="_install_gtest",
+            ),
         ]
         if detect_os() == "windows":
             self.tools.insert(4, ToolSpec(
@@ -72,6 +77,8 @@ class CppInstaller(PlatformInstaller):
             self._check_windows_sdk(tool)
         elif tool.name == "WDK":
             self._check_wdk(tool)
+        elif tool.name == "GTest (vcpkg)":
+            self._check_gtest(tool)
         else:
             super()._process_tool(tool)
 
@@ -191,6 +198,55 @@ class CppInstaller(PlatformInstaller):
              "choco": "windowsdriverkit11"},
             "WDK",
         )
+
+    def _check_gtest(self, tool: ToolSpec) -> None:
+        """Check if GTest is installed via vcpkg, install if test/ exists."""
+        write_status("CHECK", "GTest (vcpkg) 확인 중...")
+        # Only install if test/ directory exists
+        test_dir = self.project_root / "test"
+        if not test_dir.exists():
+            write_status("SKIP", "GTest — test/ 디렉토리 없음 (설치 불필요)")
+            self.result.add("SKIP", "GTest")
+            return
+
+        tp = get_thirdparty_dir(self.project_root)
+        vcpkg_exe = tp / "vcpkg" / ("vcpkg.exe" if detect_os() == "windows" else "vcpkg")
+        if not vcpkg_exe.exists():
+            write_status("FAIL", "GTest — vcpkg가 설치되지 않아 설치 불가")
+            self.result.add("FAIL", "GTest")
+            return
+
+        # Check if gtest is already installed
+        r = subprocess.run(
+            [str(vcpkg_exe), "list", "gtest"],
+            capture_output=True, text=True,
+        )
+        if r.returncode == 0 and "gtest" in r.stdout:
+            write_status("SKIP", "GTest 이미 설치됨 (vcpkg)")
+            self.result.add("SKIP", "GTest")
+            return
+
+        if self.check_only:
+            write_status("FAIL", "GTest 없음 (vcpkg install 필요)")
+            self.result.add("FAIL", "GTest")
+            return
+
+        ok = self._install_gtest()
+        self.result.add("OK" if ok else "FAIL", "GTest")
+
+    def _install_gtest(self) -> bool:
+        tp = get_thirdparty_dir(self.project_root)
+        vcpkg_exe = tp / "vcpkg" / ("vcpkg.exe" if detect_os() == "windows" else "vcpkg")
+        if not vcpkg_exe.exists():
+            write_status("FAIL", "vcpkg가 없어 GTest를 설치할 수 없습니다")
+            return False
+        write_status("INSTALL", "GTest 설치 중 (vcpkg)...")
+        ok = run_cmd([str(vcpkg_exe), "install", "gtest"])
+        if ok:
+            write_status("OK", "GTest 설치 완료")
+        else:
+            write_status("FAIL", "GTest 설치 실패")
+        return ok
 
     def _install_llvm(self) -> bool:
         os_name = detect_os()

@@ -52,6 +52,19 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# === Spring Boot / Gradle ===
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+*.jar
+*.war
+*.ear
+application-local.yml
+application-local.properties
+*.iml
+.project
+.classpath
+.settings/
+
 # === IDE ===
 .idea/
 .vscode/settings.json

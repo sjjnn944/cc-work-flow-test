@@ -44,12 +44,19 @@ class CppInstaller(PlatformInstaller):
                 name="cppcheck", cmd="cppcheck",
                 package_specs={"brew": "cppcheck"},
             ),
+            ToolSpec(
+                name="GTest (vcpkg)",
+                cmd="",
+                install_func="_install_gtest",
+            ),
         ]
 
     def _process_tool(self, tool: ToolSpec) -> None:
         """Override for tools with special check logic."""
         if tool.name == "vcpkg":
             self._check_vcpkg(tool)
+        elif tool.name == "GTest (vcpkg)":
+            self._check_gtest(tool)
         else:
             super()._process_tool(tool)
 
@@ -87,6 +94,46 @@ class CppInstaller(PlatformInstaller):
             return True
         write_status("FAIL", "vcpkg 부트스트랩 실패")
         return False
+
+    def _check_gtest(self, tool: ToolSpec) -> None:
+        write_status("CHECK", "GTest (vcpkg) 확인 중...")
+        test_dir = self.project_root / "test"
+        if not test_dir.exists():
+            write_status("SKIP", "GTest — test/ 디렉토리 없음 (설치 불필요)")
+            self.result.add("SKIP", "GTest")
+            return
+        tp = get_thirdparty_dir(self.project_root)
+        vcpkg_exe = tp / "vcpkg" / "vcpkg"
+        if not vcpkg_exe.exists():
+            write_status("FAIL", "GTest — vcpkg가 설치되지 않아 설치 불가")
+            self.result.add("FAIL", "GTest")
+            return
+        r = subprocess.run([str(vcpkg_exe), "list", "gtest"],
+                           capture_output=True, text=True)
+        if r.returncode == 0 and "gtest" in r.stdout:
+            write_status("SKIP", "GTest 이미 설치됨 (vcpkg)")
+            self.result.add("SKIP", "GTest")
+            return
+        if self.check_only:
+            write_status("FAIL", "GTest 없음 (vcpkg install 필요)")
+            self.result.add("FAIL", "GTest")
+            return
+        ok = self._install_gtest()
+        self.result.add("OK" if ok else "FAIL", "GTest")
+
+    def _install_gtest(self) -> bool:
+        tp = get_thirdparty_dir(self.project_root)
+        vcpkg_exe = tp / "vcpkg" / "vcpkg"
+        if not vcpkg_exe.exists():
+            write_status("FAIL", "vcpkg가 없어 GTest를 설치할 수 없습니다")
+            return False
+        write_status("INSTALL", "GTest 설치 중 (vcpkg)...")
+        ok = run_cmd([str(vcpkg_exe), "install", "gtest"])
+        if ok:
+            write_status("OK", "GTest 설치 완료")
+        else:
+            write_status("FAIL", "GTest 설치 실패")
+        return ok
 
     def _install_llvm(self) -> bool:
         ok = install_package({"brew": "llvm"}, "LLVM")
